@@ -1,0 +1,25 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="#3b82f6"/>
+  
+  <!-- Document/Invoice icon -->
+  <g transform="translate(64, 48)">
+    <!-- Paper/Document -->
+    <rect x="0" y="0" width="128" height="160" rx="4" fill="white"/>
+    
+    <!-- Top line -->
+    <line x1="20" y1="30" x2="108" y2="30" stroke="#3b82f6" stroke-width="3" stroke-linecap="round"/>
+    
+    <!-- Middle lines -->
+    <line x1="20" y1="60" x2="88" y2="60" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+    <line x1="20" y1="85" x2="88" y2="85" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+    <line x1="20" y1="110" x2="88" y2="110" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+    
+    <!-- Bottom amount line (highlighted) -->
+    <line x1="20" y1="135" x2="108" y2="135" stroke="#3b82f6" stroke-width="3" stroke-linecap="round"/>
+    
+    <!-- Currency symbol (₹) -->
+    <text x="64" y="155" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#3b82f6" text-anchor="middle">₹</text>
+  </g>
+</svg>
+

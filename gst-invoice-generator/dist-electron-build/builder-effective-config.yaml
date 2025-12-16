@@ -1,0 +1,38 @@
+directories:
+  output: dist-electron-build
+  buildResources: build
+appId: com.webplanx.gst-invoice-generator
+productName: GST Invoice Generator
+asar: true
+files:
+  - filter:
+      - .next/static/**/*
+      - electron/**/*
+      - package.json
+      - '!node_modules/**/*'
+      - '!.next/standalone/**/*'
+extraResources:
+  - from: .next/standalone
+    to: .next/standalone
+    filter:
+      - '**/*'
+extraFiles:
+  - from: public
+    to: public
+    filter:
+      - '**/*'
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: public/app-icon.ico
+  publisherName: WebPlanX
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: GST Invoice Generator
+  include: installer.nsh
+electronVersion: 33.4.11
