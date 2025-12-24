@@ -1,0 +1,17 @@
+# Ignore Electron-specific files for Vercel deployment
+electron/
+dist-electron/
+scripts/
+*.bat
+*.sh
+
+# Ignore build artifacts
+.next/standalone
+.next/cache
+
+# Ignore development files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
