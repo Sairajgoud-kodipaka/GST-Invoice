@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
 import { InvoiceData } from '@/app/types/invoice';
+
+// Lazy load puppeteer based on environment
+async function getPuppeteer() {
+  const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+  
+  if (isServerless) {
+    // Serverless environment - use puppeteer-core with @sparticuz/chromium
+    try {
+      const puppeteer = require('puppeteer-core');
+      const chromium = require('@sparticuz/chromium');
+      chromium.setGraphicsMode(false); // Disable graphics for serverless
+      return { puppeteer, chromium };
+    } catch (error) {
+      console.error('Failed to load serverless puppeteer, falling back to regular puppeteer:', error);
+      // Fallback to regular puppeteer
+      const puppeteer = require('puppeteer');
+      return { puppeteer, chromium: null };
+    }
+  } else {
+    // Local development - use regular puppeteer
+    const puppeteer = require('puppeteer');
+    return { puppeteer, chromium: null };
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,32 +62,54 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Get puppeteer instance based on environment
+    const { puppeteer, chromium } = await getPuppeteer();
+
     // Launch browser with timeout protection
     // Enhanced args for Vercel serverless environment
     let browser;
     try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage', // Overcome limited resource problems
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process', // Required for Vercel
-          '--disable-gpu',
-        ],
-        timeout: 30000,
-      });
+      if (chromium) {
+        // Use serverless-compatible configuration
+        browser = await puppeteer.launch({
+          args: chromium.args,
+          defaultViewport: chromium.defaultViewport,
+          executablePath: await chromium.executablePath(),
+          headless: chromium.headless,
+          ignoreHTTPSErrors: true,
+        });
+      } else {
+        // Local development configuration
+        browser = await puppeteer.launch({
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu',
+          ],
+          timeout: 30000,
+        });
+      }
     } catch (error) {
+      console.error('Browser launch error:', error);
       if (error instanceof Error && error.message.includes('timeout')) {
         return NextResponse.json(
           { error: 'Browser launch timeout. Please try again.' },
           { status: 500 }
         );
       }
-      throw error;
+      return NextResponse.json(
+        { 
+          error: 'Failed to launch browser',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { status: 500 }
+      );
     }
 
     try {
