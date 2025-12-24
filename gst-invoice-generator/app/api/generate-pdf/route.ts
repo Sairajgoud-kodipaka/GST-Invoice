@@ -40,11 +40,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Launch browser with timeout protection
+    // Enhanced args for Vercel serverless environment
     let browser;
     try {
       browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage', // Overcome limited resource problems
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process', // Required for Vercel
+          '--disable-gpu',
+        ],
         timeout: 30000,
       });
     } catch (error) {
