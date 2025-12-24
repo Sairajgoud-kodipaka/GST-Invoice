@@ -164,3 +164,4 @@ See `ELECTRON_SETUP.md` for detailed instructions.
 - Next.js Deployment: https://nextjs.org/docs/deployment
 - Check `docs/VERCEL_DEPLOYMENT.md` for detailed guide
 
+

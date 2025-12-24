@@ -16,6 +16,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -521,6 +522,9 @@ function InvoicesContent() {
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Invoice Preview</DialogTitle>
+            <DialogDescription>
+              Preview your invoice before generating the PDF
+            </DialogDescription>
           </DialogHeader>
           {previewInvoice && (
             <div className="mt-4">

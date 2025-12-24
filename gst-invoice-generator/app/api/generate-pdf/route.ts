@@ -180,9 +180,22 @@ export async function POST(request: NextRequest) {
 
     try {
       // Get base URL for invoice preview
-      const protocol = request.headers.get('x-forwarded-proto') || 'http';
-      const host = request.headers.get('host') || 'localhost:3000';
-      const baseUrl = `${protocol}://${host}`;
+      // On Vercel, use VERCEL_URL environment variable if available
+      let baseUrl: string;
+      if (process.env.VERCEL_URL) {
+        // Vercel provides the deployment URL
+        baseUrl = `https://${process.env.VERCEL_URL}`;
+      } else {
+        // Fallback to headers or localhost
+        const protocol = request.headers.get('x-forwarded-proto') || 
+                        (request.url.startsWith('https') ? 'https' : 'http');
+        const host = request.headers.get('host') || 
+                    request.headers.get('x-forwarded-host') || 
+                    'localhost:3000';
+        baseUrl = `${protocol}://${host}`;
+      }
+      
+      console.log('Base URL for invoice rendering:', baseUrl);
 
       if (batch && invoices.length > 1) {
         // Generate single PDF with multiple invoices (batch mode)
@@ -194,14 +207,20 @@ export async function POST(request: NextRequest) {
           await page.setViewport({ width: 794, height: 1123 }); // A4 size in pixels at 96 DPI
           const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
           
+          const invoiceUrl = `${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`;
+          console.log(`Navigating to invoice URL (length: ${invoiceUrl.length})`);
+          
           try {
-            await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
+            await page.goto(invoiceUrl, {
               waitUntil: 'networkidle0',
               timeout: 30000,
             });
+            console.log('Successfully loaded invoice page');
           } catch (error) {
             await page.close();
-            throw new Error(`Failed to load invoice page: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            console.error('Failed to load invoice page:', errorMsg);
+            throw new Error(`Failed to load invoice page: ${errorMsg}. URL: ${baseUrl}/invoice-render`);
           }
           
           // Wait a bit more to ensure all content is rendered
@@ -290,14 +309,20 @@ export async function POST(request: NextRequest) {
         
         // Encode invoice data and navigate to invoice render page (uses InvoiceTemplate component)
         const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
+        const invoiceUrl = `${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`;
+        console.log(`Navigating to invoice URL (length: ${invoiceUrl.length})`);
+        
         try {
-          await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
+          await page.goto(invoiceUrl, {
             waitUntil: 'networkidle0',
             timeout: 30000,
           });
+          console.log('Successfully loaded invoice page');
         } catch (error) {
           await page.close();
-          throw new Error(`Failed to load invoice page: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          console.error('Failed to load invoice page:', errorMsg);
+          throw new Error(`Failed to load invoice page: ${errorMsg}. URL: ${baseUrl}/invoice-render`);
         }
         
         // Wait a bit more to ensure all content is rendered
@@ -361,9 +386,21 @@ export async function POST(request: NextRequest) {
           await page.setViewport({ width: 794, height: 1123 }); // A4 size in pixels at 96 DPI
           const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
           
-          await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
-            waitUntil: 'networkidle0',
-          });
+          const invoiceUrl = `${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`;
+          console.log(`Navigating to invoice URL (length: ${invoiceUrl.length})`);
+          
+          try {
+            await page.goto(invoiceUrl, {
+              waitUntil: 'networkidle0',
+              timeout: 30000,
+            });
+            console.log('Successfully loaded invoice page');
+          } catch (error) {
+            await page.close();
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            console.error('Failed to load invoice page:', errorMsg);
+            throw new Error(`Failed to load invoice page: ${errorMsg}. URL: ${baseUrl}/invoice-render`);
+          }
           
           // Wait a bit more to ensure all content is rendered
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -441,8 +478,20 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('PDF generation error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to generate PDF';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    console.error('Error details:', {
+      message: errorMessage,
+      stack: errorStack,
+      name: error instanceof Error ? error.name : undefined,
+    });
+    
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to generate PDF' },
+      { 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? errorStack : undefined
+      },
       { status: 500 }
     );
   }

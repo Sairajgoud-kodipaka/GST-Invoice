@@ -76,3 +76,4 @@ If Root Directory is already empty and still failing:
 
 **This should fix it!** The Root Directory being `./` instead of empty is causing Vercel to look in the wrong place for package.json. 🎯
 
+
