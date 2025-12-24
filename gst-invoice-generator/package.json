@@ -6,13 +6,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:electron": "node scripts/clean-dist.js && next build && node scripts/copy-standalone.js",
+    "build:electron": "next build && node scripts/copy-standalone.js",
     "start": "next start",
     "lint": "eslint",
     "electron": "electron .",
     "electron:dev": "cross-env NODE_ENV=development electron .",
     "electron:build": "npm run build:electron && electron-builder",
-    "electron:build:win": "node scripts/build-with-retry.js",
+    "electron:build:win": "npm run build:electron && electron-builder --win",
     "electron:pack": "npm run build:electron && electron-builder --dir"
   },
   "dependencies": {
@@ -60,8 +60,7 @@
     "appId": "com.webplanx.gst-invoice-generator",
     "productName": "GST Invoice Generator",
     "directories": {
-      "output": "dist-electron-build",
-      "buildResources": "build"
+      "output": "dist-electron"
     },
     "asar": true,
     "files": [
@@ -94,7 +93,7 @@
           ]
         }
       ],
-      "icon": "public/app-icon.ico",
+      "icon": "public/logo-Photoroom.png",
       "publisherName": "WebPlanX"
     },
     "nsis": {

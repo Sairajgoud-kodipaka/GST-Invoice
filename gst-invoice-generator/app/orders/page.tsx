@@ -553,6 +553,7 @@ function OrdersContent() {
   const [isBulkGenerating, setIsBulkGenerating] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkExporting, setIsBulkExporting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -934,6 +935,113 @@ function OrdersContent() {
     }
   };
 
+  const handleBulkExport = async () => {
+    if (isBulkExporting) return;
+    setIsBulkExporting(true);
+
+    const selectedOrderIds = Array.from(selectedOrders);
+    const selectedOrdersData = orders.filter((o) => selectedOrderIds.includes(o.id));
+    
+    // Filter to only orders that have invoices
+    const ordersWithInvoices = selectedOrdersData.filter((o) => o.hasInvoice && o.invoiceId);
+    
+    if (ordersWithInvoices.length === 0) {
+      toast({
+        title: 'No invoices to export',
+        description: 'Please select orders that have invoices generated',
+        variant: 'destructive',
+      });
+      setIsBulkExporting(false);
+      return;
+    }
+
+    // Get invoice data for selected orders
+    const invoiceData = ordersWithInvoices
+      .map((order) => {
+        if (order.invoiceId) {
+          const invoice = invoicesStorage.getById(order.invoiceId);
+          return invoice?.invoiceData;
+        }
+        return null;
+      })
+      .filter((data): data is InvoiceData => data !== null);
+
+    if (invoiceData.length === 0) {
+      toast({
+        title: 'No invoice data found',
+        description: 'Could not find invoice data for selected orders',
+        variant: 'destructive',
+      });
+      setIsBulkExporting(false);
+      return;
+    }
+
+    try {
+      toast({
+        title: 'Export Started',
+        description: `Generating batch PDF for ${invoiceData.length} invoice(s)...`,
+      });
+
+      const response = await fetch('/api/generate-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          invoices: invoiceData,
+          batch: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate batch PDF');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.style.display = 'none';
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          a.download = filenameMatch[1];
+        } else {
+          a.download = 'invoice_batch.pdf';
+        }
+      } else {
+        a.download = 'invoice_batch.pdf';
+      }
+
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up after a short delay to ensure download starts
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        if (a.parentNode) {
+          document.body.removeChild(a);
+        }
+      }, 100);
+
+      toast({
+        title: 'Success',
+        description: `Batch PDF with ${invoiceData.length} invoice(s) exported successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to export batch PDF',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkExporting(false);
+    }
+  };
+
   const handlePreview = (order: Order) => {
     setPreviewOrder(order);
     setIsPreviewOpen(true);
@@ -1032,6 +1140,15 @@ function OrdersContent() {
               {selectedOrders.size} order(s) selected
             </span>
             <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleBulkExport}
+                disabled={isBulkExporting}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                {isBulkExporting ? 'Exporting...' : 'Export Complete Batch'}
+              </Button>
               <Button 
                 variant="outline" 
                 size="sm" 

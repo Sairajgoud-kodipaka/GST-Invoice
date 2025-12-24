@@ -209,9 +209,14 @@ function InvoicesContent() {
       a.href = url;
       a.style.display = 'none';
 
+      // Sanitize filename to remove invalid characters
+      const sanitizeFilename = (filename: string) => filename.replace(/[<>:"/\\|?*]/g, '_');
+
       if (selectedInvoiceData.length === 1) {
         const invoice = selectedInvoiceData[0];
-        a.download = `Invoice_${invoice.metadata.invoiceNo}_${invoice.metadata.orderNo}.pdf`;
+        const invoiceNo = sanitizeFilename(invoice.metadata.invoiceNo || 'invoice');
+        const orderNo = sanitizeFilename(invoice.metadata.orderNo || 'order');
+        a.download = `Invoice_${invoiceNo}_${orderNo}.pdf`;
       } else {
         a.download = 'invoices.zip';
       }
@@ -222,7 +227,9 @@ function InvoicesContent() {
       // Clean up after a short delay to ensure download starts
       setTimeout(() => {
         window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+        if (a.parentNode) {
+          document.body.removeChild(a);
+        }
       }, 100);
 
       toast({
@@ -233,6 +240,84 @@ function InvoicesContent() {
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to download invoices',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleBulkExport = async () => {
+    const selectedInvoiceData = invoices
+      .filter((inv) => selectedInvoices.has(inv.id))
+      .map((inv) => inv.invoiceData);
+
+    if (selectedInvoiceData.length === 0) {
+      toast({
+        title: 'No invoices selected',
+        description: 'Please select at least one invoice to export',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      toast({
+        title: 'Export Started',
+        description: `Generating batch PDF for ${selectedInvoiceData.length} invoice(s)...`,
+      });
+
+      const response = await fetch('/api/generate-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          invoices: selectedInvoiceData,
+          batch: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate batch PDF');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.style.display = 'none';
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          a.download = filenameMatch[1];
+        } else {
+          a.download = 'invoice_batch.pdf';
+        }
+      } else {
+        a.download = 'invoice_batch.pdf';
+      }
+
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up after a short delay to ensure download starts
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        if (a.parentNode) {
+          document.body.removeChild(a);
+        }
+      }, 100);
+
+      toast({
+        title: 'Success',
+        description: `Batch PDF with ${selectedInvoiceData.length} invoice(s) exported successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to export batch PDF',
         variant: 'destructive',
       });
     }
@@ -270,6 +355,10 @@ function InvoicesContent() {
               {selectedInvoices.size} invoice(s) selected
             </span>
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleBulkExport}>
+                <FileText className="h-4 w-4 mr-2" />
+                Export Complete Batch
+              </Button>
               <Button variant="outline" size="sm" onClick={handleBulkDownload}>
                 <Download className="h-4 w-4 mr-2" />
                 Download Selected

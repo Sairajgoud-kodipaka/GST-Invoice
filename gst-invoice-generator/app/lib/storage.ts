@@ -258,8 +258,8 @@ export const businessSettingsStorage = {
 };
 
 const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
-  prefix: 'INV-',
-  startingNumber: 1,
+  prefix: 'O-/',
+  startingNumber: 3340,
   autoIncrement: true,
   defaultPaymentTerms: 30,
   defaultPaymentMethod: 'Bank Transfer',
@@ -289,6 +289,29 @@ export const invoiceSettingsStorage = {
   clear: (): void => {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(INVOICE_SETTINGS_KEY);
+  },
+
+  // Get next invoice number and optionally increment
+  getNextInvoiceNumber: (increment: boolean = true): string => {
+    if (typeof window === 'undefined') return `${DEFAULT_INVOICE_SETTINGS.prefix}${DEFAULT_INVOICE_SETTINGS.startingNumber}`;
+    try {
+      const settings = invoiceSettingsStorage.get();
+      const currentNumber = settings.startingNumber;
+      const invoiceNo = `${settings.prefix}${currentNumber}`;
+      
+      if (increment && settings.autoIncrement) {
+        // Increment the number for next time
+        invoiceSettingsStorage.save({
+          ...settings,
+          startingNumber: currentNumber + 1,
+        });
+      }
+      
+      return invoiceNo;
+    } catch (error) {
+      console.error('Error getting next invoice number:', error);
+      return `${DEFAULT_INVOICE_SETTINGS.prefix}${DEFAULT_INVOICE_SETTINGS.startingNumber}`;
+    }
   },
 };
 

@@ -1,5 +1,5 @@
 import { CSVRow, InvoiceData, BusinessDetails, PartyDetails, InvoiceMetadata, InvoiceLineItem, ParsedCSVData } from '@/app/types/invoice';
-import { businessSettingsStorage } from '@/app/lib/storage';
+import { businessSettingsStorage, invoiceSettingsStorage } from '@/app/lib/storage';
 
 // Default business details (fallback if settings not configured)
 const DEFAULT_BUSINESS: BusinessDetails = {
@@ -11,7 +11,7 @@ const DEFAULT_BUSINESS: BusinessDetails = {
   pincode: '500063',
   email: 'sales@pearlsbymangatrai.com',
   phone: '+91 91000 09220',
-  gstin: '36AAPCM295SG124',
+  gstin: '36AAPCM2955G1Z4',
   cin: 'U36900TG2021PTC158093',
   pan: 'AAPCM2955G',
 };
@@ -114,6 +114,15 @@ function extractGSTRateFromName(taxName: string): number {
   // Match patterns like "IGST 3%", "CGST 5%", "GST 18%", etc.
   const match = taxName.match(/(\d+(?:\.\d+)?)\s*%/i);
   return match ? parseFloat(match[1]) : 0;
+}
+
+// Extract invoice number from order number (e.g., "MAN-25-5982" -> "5982")
+function extractInvoiceNumber(orderNo: string): string {
+  if (!orderNo) return '';
+  // Extract the last number sequence from the order number
+  // Matches patterns like "MAN-25-5982" -> "5982", "ORDER-123" -> "123"
+  const match = orderNo.match(/(\d+)(?!.*\d)/);
+  return match ? match[1] : orderNo;
 }
 
 function formatDate(dateStr: string): string {
@@ -368,14 +377,14 @@ export function mapCSVToInvoice(
   const totalIgst = getNumericValue(row, totalIgstCol);
   const totalAmountAfterTax = getNumericValue(row, totalAmountCol) || 0; // Use from CSV only, no calculation
 
-  // Create invoice metadata
+  // Create invoice metadata - use sequential invoice number from settings
   const metadata: InvoiceMetadata = {
-    invoiceNo: `O-/${orderNo}`,
+    invoiceNo: invoiceSettingsStorage.getNextInvoiceNumber(),
     orderNo: orderNo,
     invoiceDate,
     orderDate,
     placeOfSupply: shipToParty.city || shipToParty.state || 'N/A',
-    transportMode: transportMode || 'DTDC Air 500gm',
+    transportMode: transportMode,
     paymentMethod,
     state: shipToParty.state || getBusinessDetails().state,
     stateCode: shipToParty.stateCode || getBusinessDetails().gstin.substring(0, 2),

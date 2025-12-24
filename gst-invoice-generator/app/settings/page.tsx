@@ -227,7 +227,9 @@ export default function SettingsPage() {
     // Clean up after a short delay to ensure download starts
     setTimeout(() => {
       URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      if (a.parentNode) {
+        document.body.removeChild(a);
+      }
     }, 100);
 
     toast({
@@ -440,7 +442,7 @@ export default function SettingsPage() {
                 id="gstin"
                 value={businessSettings.gstin}
                 onChange={(e) => setBusinessSettings({ ...businessSettings, gstin: e.target.value.toUpperCase() })}
-                placeholder="36AAPCM295SG124"
+                placeholder="36AAPCM2955G1Z4"
                 maxLength={15}
               />
               <p className="text-xs text-muted-foreground">15 characters, alphanumeric</p>
@@ -507,12 +509,12 @@ export default function SettingsPage() {
                 id="prefix"
                 value={invoiceSettings.prefix}
                 onChange={(e) => setInvoiceSettings({ ...invoiceSettings, prefix: e.target.value })}
-                placeholder="INV-"
+                placeholder="O-/"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="startingNumber">Starting Number</Label>
+              <Label htmlFor="startingNumber">Starting Number (Current: {invoiceSettings.startingNumber})</Label>
               <Input
                 id="startingNumber"
                 type="number"
@@ -520,6 +522,9 @@ export default function SettingsPage() {
                 value={invoiceSettings.startingNumber}
                 onChange={(e) => setInvoiceSettings({ ...invoiceSettings, startingNumber: parseInt(e.target.value) || 1 })}
               />
+              <p className="text-xs text-muted-foreground">
+                Next invoice number will be: {invoiceSettings.prefix}{invoiceSettings.startingNumber}
+              </p>
             </div>
 
             <div className="space-y-2 md:col-span-2">

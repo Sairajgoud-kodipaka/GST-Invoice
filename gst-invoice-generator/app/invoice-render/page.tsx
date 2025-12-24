@@ -53,10 +53,60 @@ function InvoiceContent() {
         margin: 0, 
         padding: 0, 
         background: 'white',
-        minHeight: '100vh',
+        height: 'auto',
+        minHeight: 'auto',
         width: '100%'
       }}
     >
+      <style>{`
+        @media print {
+          @page {
+            size: A4;
+            margin: 2mm;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: auto !important;
+            overflow: hidden !important;
+          }
+          .invoice-page {
+            width: 210mm !important;
+            max-width: 210mm !important;
+            height: auto !important;
+            min-height: auto !important;
+            max-height: 297mm !important;
+            margin: 0 auto !important;
+            border: 2px solid #000 !important;
+            box-sizing: border-box !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            page-break-before: avoid !important;
+            overflow: hidden !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          /* Keep all content on one page */
+          .line-items-table {
+            page-break-inside: avoid !important;
+          }
+          table {
+            page-break-inside: avoid !important;
+          }
+          /* Prevent blank pages */
+          body > div:empty {
+            display: none !important;
+            height: 0 !important;
+          }
+          .invoice-template ~ * {
+            display: none !important;
+          }
+          * {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+        }
+      `}</style>
       <InvoiceTemplate invoice={invoice} />
     </div>
   );

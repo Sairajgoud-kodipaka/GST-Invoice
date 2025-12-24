@@ -11,12 +11,30 @@ interface DownloadButtonProps {
   single?: boolean;
 }
 
+// Sanitize filename to remove invalid characters
+function sanitizeFilename(filename: string): string {
+  // Replace invalid filename characters with underscore
+  return filename.replace(/[<>:"/\\|?*]/g, '_');
+}
+
 export function DownloadButton({ invoices, single }: DownloadButtonProps) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   const handleDownload = async () => {
+    if (!invoices || invoices.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'No invoices to download',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
+    let downloadUrl: string | null = null;
+    let downloadElement: HTMLAnchorElement | null = null;
+
     try {
       const response = await fetch('/api/generate-pdf', {
         method: 'POST',
@@ -30,29 +48,36 @@ export function DownloadButton({ invoices, single }: DownloadButtonProps) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate PDF');
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to generate PDF');
       }
 
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.style.display = 'none';
+      downloadUrl = window.URL.createObjectURL(blob);
+      downloadElement = document.createElement('a');
+      downloadElement.href = downloadUrl;
+      downloadElement.style.display = 'none';
 
       if (single || invoices.length === 1) {
         const invoice = invoices[0];
-        a.download = `Invoice_${invoice.metadata.invoiceNo}_${invoice.metadata.orderNo}.pdf`;
+        const invoiceNo = sanitizeFilename(invoice.metadata.invoiceNo || 'invoice');
+        const orderNo = sanitizeFilename(invoice.metadata.orderNo || 'order');
+        downloadElement.download = `Invoice_${invoiceNo}_${orderNo}.pdf`;
       } else {
-        a.download = 'invoices.zip';
+        downloadElement.download = 'invoices.zip';
       }
 
-      document.body.appendChild(a);
-      a.click();
+      document.body.appendChild(downloadElement);
+      downloadElement.click();
       
       // Clean up after a short delay to ensure download starts
       setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+        if (downloadUrl) {
+          window.URL.revokeObjectURL(downloadUrl);
+        }
+        if (downloadElement && downloadElement.parentNode) {
+          document.body.removeChild(downloadElement);
+        }
       }, 100);
 
       toast({
