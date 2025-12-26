@@ -1,65 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
 import { InvoiceData } from '@/app/types/invoice';
-
-// Lazy load puppeteer based on environment
-async function getPuppeteer() {
-  // Check if we're in a serverless environment (Vercel sets VERCEL=1)
-  const isVercel = process.env.VERCEL === '1' || !!process.env.VERCEL_ENV;
-  const isServerless = isVercel || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
-  
-  console.log('Environment detection:', {
-    VERCEL: process.env.VERCEL,
-    VERCEL_ENV: process.env.VERCEL_ENV,
-    AWS_LAMBDA: process.env.AWS_LAMBDA_FUNCTION_NAME,
-    NEXT_RUNTIME: process.env.NEXT_RUNTIME,
-    isVercel,
-    isServerless
-  });
-  
-  // Always try serverless setup first if on Vercel
-  if (isServerless) {
-    try {
-      console.log('Attempting to load puppeteer-core with @sparticuz/chromium...');
-      // Use dynamic imports for better Next.js serverless compatibility
-      const puppeteerModule = await import('puppeteer-core');
-      const chromiumModule = await import('@sparticuz/chromium');
-      
-      const puppeteer = puppeteerModule.default || puppeteerModule;
-      const chromium = chromiumModule.default || chromiumModule;
-      
-      // Configure chromium for serverless
-      if (chromium.setGraphicsMode) {
-        chromium.setGraphicsMode(false);
-      }
-      
-      console.log('Successfully loaded puppeteer-core with @sparticuz/chromium');
-      return { puppeteer, chromium };
-    } catch (error) {
-      console.error('Failed to load serverless puppeteer:', error);
-      // Don't fall back - fail explicitly so we know what's wrong
-      throw new Error(
-        `Failed to load serverless puppeteer. ` +
-        `Make sure @sparticuz/chromium and puppeteer-core are installed. ` +
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
-  } else {
-    // Local development - use regular puppeteer
-    console.log('Using regular puppeteer for local development');
-    try {
-      const puppeteerModule = await import('puppeteer');
-      const puppeteer = puppeteerModule.default || puppeteerModule;
-      return { puppeteer, chromium: null };
-    } catch (error) {
-      throw new Error(
-        `Failed to load puppeteer for local development. ` +
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -96,106 +40,47 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get puppeteer instance based on environment
-    const { puppeteer, chromium } = await getPuppeteer();
-
     // Launch browser with timeout protection
-    // Enhanced args for Vercel serverless environment
+    // Configure for Vercel serverless environment
+    const isVercel = process.env.VERCEL === '1';
     let browser;
     try {
-      if (chromium) {
-        // Use serverless-compatible configuration
-        let executablePath: string;
-        try {
-          executablePath = await chromium.executablePath();
-          console.log('Chromium executable path resolved:', executablePath);
-          
-          // Verify the path exists (basic check)
-          if (!executablePath || executablePath.length === 0) {
-            throw new Error('Chromium executable path is empty');
-          }
-        } catch (pathError) {
-          console.error('Failed to get Chromium executable path:', pathError);
-          throw new Error(
-            `Failed to resolve Chromium executable path: ${pathError instanceof Error ? pathError.message : 'Unknown error'}`
-          );
-        }
-        
-        console.log('Launching browser with Chromium...');
-        browser = await puppeteer.launch({
-          args: [
-            ...chromium.args,
-            '--disable-gpu',
-            '--disable-dev-shm-usage',
-            '--disable-setuid-sandbox',
-            '--no-sandbox',
-          ],
-          defaultViewport: chromium.defaultViewport,
-          executablePath: executablePath,
-          headless: chromium.headless,
-          ignoreHTTPSErrors: true,
-        });
-        console.log('Browser launched successfully with Chromium');
-      } else {
-        // Local development configuration
-        browser = await puppeteer.launch({
-          headless: true,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process',
-            '--disable-gpu',
-          ],
-          timeout: 30000,
-        });
-        console.log('Browser launched successfully (local)');
+      const launchOptions: any = {
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-gpu',
+        ],
+        timeout: 30000,
+      };
+
+      // Use @sparticuz/chromium on Vercel
+      if (isVercel) {
+        launchOptions.executablePath = await chromium.executablePath();
       }
+
+      browser = await puppeteer.launch(launchOptions);
     } catch (error) {
-      console.error('Browser launch error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Error details:', {
-        message: errorMessage,
-        stack: error instanceof Error ? error.stack : undefined,
-        chromium: chromium ? 'available' : 'not available'
-      });
-      
       if (error instanceof Error && error.message.includes('timeout')) {
         return NextResponse.json(
           { error: 'Browser launch timeout. Please try again.' },
           { status: 500 }
         );
       }
-      return NextResponse.json(
-        { 
-          error: 'Failed to launch browser',
-          details: errorMessage
-        },
-        { status: 500 }
-      );
+      throw error;
     }
 
     try {
       // Get base URL for invoice preview
-      // On Vercel, use VERCEL_URL environment variable if available
-      let baseUrl: string;
-      if (process.env.VERCEL_URL) {
-        // Vercel provides the deployment URL
-        baseUrl = `https://${process.env.VERCEL_URL}`;
-      } else {
-        // Fallback to headers or localhost
-        const protocol = request.headers.get('x-forwarded-proto') || 
-                        (request.url.startsWith('https') ? 'https' : 'http');
-        const host = request.headers.get('host') || 
-                    request.headers.get('x-forwarded-host') || 
-                    'localhost:3000';
-        baseUrl = `${protocol}://${host}`;
-      }
-      
-      console.log('Base URL for invoice rendering:', baseUrl);
+      const protocol = request.headers.get('x-forwarded-proto') || 'http';
+      const host = request.headers.get('host') || 'localhost:3000';
+      const baseUrl = `${protocol}://${host}`;
 
       if (batch && invoices.length > 1) {
         // Generate single PDF with multiple invoices (batch mode)
@@ -207,20 +92,14 @@ export async function POST(request: NextRequest) {
           await page.setViewport({ width: 794, height: 1123 }); // A4 size in pixels at 96 DPI
           const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
           
-          const invoiceUrl = `${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`;
-          console.log(`Navigating to invoice URL (length: ${invoiceUrl.length})`);
-          
           try {
-            await page.goto(invoiceUrl, {
+            await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
               waitUntil: 'networkidle0',
               timeout: 30000,
             });
-            console.log('Successfully loaded invoice page');
           } catch (error) {
             await page.close();
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            console.error('Failed to load invoice page:', errorMsg);
-            throw new Error(`Failed to load invoice page: ${errorMsg}. URL: ${baseUrl}/invoice-render`);
+            throw new Error(`Failed to load invoice page: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
           
           // Wait a bit more to ensure all content is rendered
@@ -309,20 +188,14 @@ export async function POST(request: NextRequest) {
         
         // Encode invoice data and navigate to invoice render page (uses InvoiceTemplate component)
         const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
-        const invoiceUrl = `${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`;
-        console.log(`Navigating to invoice URL (length: ${invoiceUrl.length})`);
-        
         try {
-          await page.goto(invoiceUrl, {
+          await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
             waitUntil: 'networkidle0',
             timeout: 30000,
           });
-          console.log('Successfully loaded invoice page');
         } catch (error) {
           await page.close();
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          console.error('Failed to load invoice page:', errorMsg);
-          throw new Error(`Failed to load invoice page: ${errorMsg}. URL: ${baseUrl}/invoice-render`);
+          throw new Error(`Failed to load invoice page: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
         
         // Wait a bit more to ensure all content is rendered
@@ -386,21 +259,9 @@ export async function POST(request: NextRequest) {
           await page.setViewport({ width: 794, height: 1123 }); // A4 size in pixels at 96 DPI
           const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
           
-          const invoiceUrl = `${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`;
-          console.log(`Navigating to invoice URL (length: ${invoiceUrl.length})`);
-          
-          try {
-            await page.goto(invoiceUrl, {
-              waitUntil: 'networkidle0',
-              timeout: 30000,
-            });
-            console.log('Successfully loaded invoice page');
-          } catch (error) {
-            await page.close();
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            console.error('Failed to load invoice page:', errorMsg);
-            throw new Error(`Failed to load invoice page: ${errorMsg}. URL: ${baseUrl}/invoice-render`);
-          }
+          await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
+            waitUntil: 'networkidle0',
+          });
           
           // Wait a bit more to ensure all content is rendered
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -478,20 +339,8 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('PDF generation error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to generate PDF';
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    
-    console.error('Error details:', {
-      message: errorMessage,
-      stack: errorStack,
-      name: error instanceof Error ? error.name : undefined,
-    });
-    
     return NextResponse.json(
-      { 
-        error: errorMessage,
-        details: process.env.NODE_ENV === 'development' ? errorStack : undefined
-      },
+      { error: error instanceof Error ? error.message : 'Failed to generate PDF' },
       { status: 500 }
     );
   }
