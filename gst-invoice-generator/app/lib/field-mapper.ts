@@ -1,5 +1,6 @@
 import { CSVRow, InvoiceData, BusinessDetails, PartyDetails, InvoiceMetadata, InvoiceLineItem, ParsedCSVData } from '@/app/types/invoice';
 import { businessSettingsStorage, invoiceSettingsStorage } from '@/app/lib/storage';
+import { invoiceService } from './invoice-service';
 
 // Default business details (fallback if settings not configured)
 const DEFAULT_BUSINESS: BusinessDetails = {
@@ -142,7 +143,8 @@ function formatDate(dateStr: string): string {
 
 export function mapCSVToInvoice(
   data: ParsedCSVData,
-  rowIndex: number = 0
+  rowIndex: number = 0,
+  invoiceNo?: string
 ): InvoiceData {
   const row = data.rows[rowIndex];
   const headers = data.headers;
@@ -377,9 +379,10 @@ export function mapCSVToInvoice(
   const totalIgst = getNumericValue(row, totalIgstCol);
   const totalAmountAfterTax = getNumericValue(row, totalAmountCol) || 0; // Use from CSV only, no calculation
 
-  // Create invoice metadata - use sequential invoice number from settings
+  // Create invoice metadata - invoice number should be provided by caller
+  // Falls back to localStorage if not provided
   const metadata: InvoiceMetadata = {
-    invoiceNo: invoiceSettingsStorage.getNextInvoiceNumber(),
+    invoiceNo: invoiceNo || invoiceSettingsStorage.getNextInvoiceNumber(),
     orderNo: orderNo,
     invoiceDate,
     orderDate,

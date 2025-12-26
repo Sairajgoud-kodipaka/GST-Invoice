@@ -1280,25 +1280,10 @@ function OrdersContent() {
                 : 'No orders match your search'}
           </p>
             {orders.length === 0 && (
-          <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
-            <DialogTrigger asChild>
-              <Button>
+              <Button onClick={() => setIsImportModalOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Import Orders
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Import Orders from CSV</DialogTitle>
-              </DialogHeader>
-              <div className="mt-4">
-                <CSVProcessor
-                  onInvoicesReady={handleInvoicesReady}
-                  onError={handleError}
-                />
-              </div>
-            </DialogContent>
-          </Dialog>
             )}
         </div>
       ) : (

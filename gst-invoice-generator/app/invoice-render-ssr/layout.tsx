@@ -7,3 +7,4 @@ export default function InvoiceRenderSSRLayout({
   return children;
 }
 
+

@@ -20,7 +20,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { DownloadButton } from '@/components/actions/DownloadButton';
+import { PDFButton } from '@/components/actions/PDFButton';
+import { BatchPDFButton } from '@/components/actions/BatchPDFButton';
 import { PrintButton } from '@/components/actions/PrintButton';
 import { InvoicePreview } from '@/components/invoice/InvoicePreview';
 import { invoicesStorage, ordersStorage, Invoice } from '@/app/lib/storage';
@@ -168,89 +169,6 @@ function InvoicesContent() {
     });
   };
 
-  const handleBulkDownload = async () => {
-    const selectedInvoiceData = invoices
-      .filter((inv) => selectedInvoices.has(inv.id))
-      .map((inv) => inv.invoiceData);
-
-    if (selectedInvoiceData.length === 0) {
-      toast({
-        title: 'No invoices selected',
-        description: 'Please select at least one invoice to download',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      toast({
-        title: 'Download Started',
-        description: `Generating PDF for ${selectedInvoiceData.length} invoice(s)...`,
-      });
-
-      const response = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          invoices: selectedInvoiceData,
-          single: selectedInvoiceData.length === 1,
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMessage = 'Failed to generate PDF';
-        try {
-          const contentType = response.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const errorData = await response.json();
-            errorMessage = errorData.error || errorMessage;
-          } else {
-            const errorText = await response.text();
-            errorMessage = errorText || errorMessage;
-          }
-        } catch (parseError) {
-          // If parsing fails, use default message
-          console.error('Error parsing error response:', parseError);
-        }
-        throw new Error(errorMessage);
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.style.display = 'none';
-
-      if (selectedInvoiceData.length === 1) {
-        const invoice = selectedInvoiceData[0];
-        a.download = `Invoice_${invoice.metadata.invoiceNo}_${invoice.metadata.orderNo}.pdf`;
-      } else {
-        a.download = 'invoices.zip';
-      }
-
-      document.body.appendChild(a);
-      a.click();
-      
-      // Clean up after a short delay to ensure download starts
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }, 100);
-
-      toast({
-        title: 'Success',
-        description: `${selectedInvoiceData.length} invoice(s) downloaded successfully`,
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to download invoices',
-        variant: 'destructive',
-      });
-    }
-  };
 
   const handlePreview = (invoice: Invoice) => {
     setPreviewInvoice(invoice);
@@ -284,10 +202,22 @@ function InvoicesContent() {
               {selectedInvoices.size} invoice(s) selected
             </span>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleBulkDownload}>
-                <Download className="h-4 w-4 mr-2" />
-                Download Selected
-              </Button>
+              <BatchPDFButton
+                invoices={invoices
+                  .filter((inv) => selectedInvoices.has(inv.id))
+                  .map((inv) => inv.invoiceData)}
+                mode="merged"
+                size="sm"
+                variant="outline"
+              />
+              <BatchPDFButton
+                invoices={invoices
+                  .filter((inv) => selectedInvoices.has(inv.id))
+                  .map((inv) => inv.invoiceData)}
+                mode="zip"
+                size="sm"
+                variant="outline"
+              />
               <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Selected
@@ -393,7 +323,7 @@ function InvoicesContent() {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <DownloadButton invoices={[invoice.invoiceData]} single />
+                            <PDFButton invoice={invoice.invoiceData} size="sm" variant="ghost" />
                             <PrintButton invoice={invoice.invoiceData} />
                             <Button
                               variant="ghost"
@@ -451,7 +381,7 @@ function InvoicesContent() {
             <div className="mt-4">
               <InvoicePreview invoices={[previewInvoice.invoiceData]} />
               <div className="flex gap-4 mt-6 justify-end">
-                <DownloadButton invoices={[previewInvoice.invoiceData]} single />
+                <PDFButton invoice={previewInvoice.invoiceData} />
                 <PrintButton invoice={previewInvoice.invoiceData} />
                 <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
                   Close

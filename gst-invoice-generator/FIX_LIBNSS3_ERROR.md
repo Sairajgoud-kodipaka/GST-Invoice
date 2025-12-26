@@ -94,3 +94,4 @@ Your `package.json` should have:
 - [Vercel Community Discussion](https://community.vercel.com/t/puppeteer-on-node-22-x-missing-libnspr4-so/23372)
 - [@sparticuz/chromium GitHub](https://github.com/Sparticuz/chromium)
 
+

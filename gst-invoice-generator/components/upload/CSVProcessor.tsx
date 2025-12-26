@@ -6,8 +6,9 @@ import { mapCSVToInvoice, mapMultipleOrders } from '@/app/lib/field-mapper';
 import { numberToWords } from '@/app/lib/invoice-formatter';
 import { calculateInvoiceTotals } from '@/app/lib/invoice-calculator';
 import { ParsedCSVData, InvoiceData } from '@/app/types/invoice';
+import { invoiceService } from '@/app/lib/invoice-service';
+import { useToast } from '@/hooks/use-toast';
 import { CSVUploadZone } from './CSVUploadZone';
-import { ImportStatusIndicator } from './ImportStatusIndicator';
 
 interface CSVProcessorProps {
   onInvoicesReady: (invoices: InvoiceData[]) => void;
@@ -18,6 +19,7 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
   const [step, setStep] = useState<'upload' | 'processing' | 'complete'>('upload');
   const [csvFiles, setCsvFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState(0);
+  const { toast } = useToast();
 
   const handleFileSelect = useCallback(async (files: File[]) => {
     setCsvFiles(files);
@@ -111,7 +113,7 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
           throw new Error(`Validation failed for ${file.name}: ${validationErrors.join('; ')}`);
         }
 
-        // Map CSV to invoices
+        // Map CSV to invoices (without invoice numbers first)
         let rawInvoices: InvoiceData[];
         try {
           rawInvoices = data.rows.length === 1
@@ -121,11 +123,78 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
           throw new Error(`Failed to map CSV data: ${mappingError instanceof Error ? mappingError.message : 'Unknown mapping error'}`);
         }
 
+        setProgress(fileProgressStart + fileProgressRange * 0.5);
+
+        // Assign invoice numbers from Supabase (with duplicate checking)
+        const invoicesWithNumbers: InvoiceData[] = [];
+        const skippedInvoices: Array<{ invoiceNo: string; reason: string; orderNo: string }> = [];
+        
+        let currentInvoiceNo = await invoiceService.getNext();
+        
+        for (const invoice of rawInvoices) {
+          let invoiceNoToUse = currentInvoiceNo;
+          let attempts = 0;
+          const maxAttempts = 10; // Prevent infinite loop
+          
+          // Try to create invoice in Supabase (checks for duplicates)
+          while (attempts < maxAttempts) {
+            const existsCheck = await invoiceService.exists(invoiceNoToUse);
+            
+            if (existsCheck.exists) {
+              // Invoice number already exists, try next one
+              invoiceNoToUse = invoiceService.incrementInvoiceNumber(invoiceNoToUse);
+              attempts++;
+              
+              if (attempts >= maxAttempts) {
+                skippedInvoices.push({
+                  invoiceNo: currentInvoiceNo,
+                  reason: `Could not find available invoice number after ${maxAttempts} attempts`,
+                  orderNo: invoice.metadata.orderNo,
+                });
+                break;
+              }
+            } else {
+              // Invoice number is available, create it in Supabase
+              const createResult = await invoiceService.create(
+                invoiceNoToUse,
+                invoice.metadata.orderNo,
+                invoice.metadata.invoiceDate,
+                {
+                  orderDate: invoice.metadata.orderDate,
+                  customerName: invoice.billToParty.name,
+                  totalAmount: invoice.taxSummary.totalAmountAfterTax,
+                  invoiceData: invoice,
+                }
+              );
+              
+              if (createResult.success) {
+                // Successfully created, use this invoice number
+                invoice.metadata.invoiceNo = invoiceNoToUse;
+                invoicesWithNumbers.push(invoice);
+                currentInvoiceNo = invoiceService.incrementInvoiceNumber(invoiceNoToUse);
+                break;
+              } else if (createResult.exists) {
+                // Race condition - someone else created it, try next number
+                invoiceNoToUse = invoiceService.incrementInvoiceNumber(invoiceNoToUse);
+                attempts++;
+              } else {
+                // Other error
+                skippedInvoices.push({
+                  invoiceNo: invoiceNoToUse,
+                  reason: createResult.error || 'Failed to create invoice',
+                  orderNo: invoice.metadata.orderNo,
+                });
+                break;
+              }
+            }
+          }
+        }
+
         setProgress(fileProgressStart + fileProgressRange * 0.7);
 
         // Recalculate all totals using proper GST calculations
         // This ensures line items, taxes, and totals are all consistent
-        const calculatedInvoices = rawInvoices.map(calculateInvoiceTotals);
+        const calculatedInvoices = invoicesWithNumbers.map(calculateInvoiceTotals);
 
         setProgress(fileProgressStart + fileProgressRange * 0.8);
 
@@ -136,6 +205,19 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
             amountInWords: numberToWords(invoice.taxSummary.totalAmountAfterTax),
           };
         });
+
+        // Show warnings for skipped invoices
+        if (skippedInvoices.length > 0) {
+          const skippedDetails = skippedInvoices.map(s => 
+            `Invoice ${s.invoiceNo} (Order: ${s.orderNo}): ${s.reason}`
+          ).join('\n');
+          
+          toast({
+            title: 'Some invoices were skipped',
+            description: `${skippedInvoices.length} invoice(s) could not be created. ${skippedDetails}`,
+            variant: 'destructive',
+          });
+        }
 
         allInvoices.push(...finalInvoices);
         processedFiles.push({
@@ -195,12 +277,6 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
 
   return (
     <>
-      <ImportStatusIndicator 
-        step={step === 'complete' ? 'complete' : step === 'processing' ? 'processing' : 'upload'} 
-        progress={progress} 
-        fileName={csvFiles.length === 1 ? csvFiles[0]?.name : csvFiles.length > 1 ? `${csvFiles.length} files` : undefined}
-      />
-      
       {step === 'upload' && (
         <CSVUploadZone onFileSelect={handleFileSelect} />
       )}
