@@ -1,52 +1,9 @@
-'use client';
-
-import { useSearchParams } from 'next/navigation';
-import { useEffect, useState, Suspense } from 'react';
+// Fully server-rendered page - no client-side hydration
 import { InvoiceData } from '@/app/types/invoice';
 import { InvoiceTemplate } from '@/components/invoice/InvoiceTemplate';
 
-function InvoiceContent() {
-  const searchParams = useSearchParams();
-  const [invoice, setInvoice] = useState<InvoiceData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const dataParam = searchParams.get('data');
-    if (dataParam) {
-      try {
-        // Decode base64 in browser
-        const decoded = atob(dataParam);
-        const invoiceData: InvoiceData = JSON.parse(decoded);
-        setInvoice(invoiceData);
-      } catch (error) {
-        console.error('Failed to parse invoice data:', error);
-      }
-    }
-    setLoading(false);
-  }, [searchParams]);
-
-  if (loading) {
-    return (
-      <div 
-        className="flex items-center justify-center min-h-screen bg-white"
-        style={{ margin: 0, padding: 0 }}
-      >
-        <p>Loading invoice...</p>
-      </div>
-    );
-  }
-
-  if (!invoice) {
-    return (
-      <div 
-        className="flex items-center justify-center min-h-screen bg-white"
-        style={{ margin: 0, padding: 0 }}
-      >
-        <p>Invalid invoice data</p>
-      </div>
-    );
-  }
-
+// Server component - no hydration needed
+function InvoiceContent({ invoice }: { invoice: InvoiceData }) {
   return (
     <div 
       style={{ 
@@ -58,7 +15,7 @@ function InvoiceContent() {
         width: '100%'
       }}
     >
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           @page {
             size: A4 portrait;
@@ -124,25 +81,58 @@ function InvoiceContent() {
             page-break-inside: avoid !important;
           }
         }
-      `}</style>
+      ` }} />
       <InvoiceTemplate invoice={invoice} />
     </div>
   );
 }
 
-export default function InvoiceRenderPage() {
-  return (
-    <Suspense fallback={
+// Server component that decodes data and passes to client component
+// Works in both development and Vercel production
+export default async function InvoiceRenderSSRPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ data?: string }>;
+}) {
+  // Next.js 15 requires searchParams to be a Promise
+  const params = await searchParams;
+  let invoice: InvoiceData | null = null;
+
+  if (params.data) {
+    try {
+      // Decode base64 on server - handle URL encoding from query string
+      // The data comes URL-encoded from the query parameter
+      let dataToDecode = params.data;
+      
+      // Try URL decoding first (most common case)
+      try {
+        dataToDecode = decodeURIComponent(params.data);
+      } catch {
+        // If URL decode fails, use original (might already be decoded)
+        dataToDecode = params.data;
+      }
+      
+      // Decode base64
+      const decoded = Buffer.from(dataToDecode, 'base64').toString('utf-8');
+      invoice = JSON.parse(decoded) as InvoiceData;
+    } catch (error) {
+      console.error('Failed to parse invoice data:', error);
+      // Return null - will show error message
+    }
+  }
+
+  if (!invoice) {
+    return (
       <div 
         className="flex items-center justify-center min-h-screen bg-white"
         style={{ margin: 0, padding: 0 }}
       >
-        <p>Loading invoice...</p>
+        <p>Invalid invoice data</p>
       </div>
-    }>
-      <InvoiceContent />
-    </Suspense>
-  );
-}
+    );
+  }
 
+  // Pass invoice directly as prop - no useSearchParams, no Suspense, no hydration delays
+  return <InvoiceContent invoice={invoice} />;
+}
 

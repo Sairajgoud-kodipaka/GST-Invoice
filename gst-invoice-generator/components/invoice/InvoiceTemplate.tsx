@@ -72,13 +72,13 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           height: 'auto',
           minHeight: 'auto',
           maxHeight: '297mm',
-          padding: '3mm 4mm 3mm 4mm',
-          border: '2px solid #000',
+          padding: '8mm', // Equal padding on all sides
+          border: '2.5px solid #000',
           position: 'relative',
           boxSizing: 'border-box',
           margin: '0 auto',
           backgroundColor: 'white',
-          overflow: 'hidden',
+          overflow: 'visible', // Changed from hidden
         }}
       >
         {/* ======== TOP HEADER (exact like PDF) ======== */}
@@ -95,11 +95,11 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           <div>
             <h1
               style={{
-                fontSize: '18px',
+                fontSize: '22px',
                 fontWeight: 'bold',
                 margin: 0,
-                marginBottom: '2px',
-                lineHeight: '1.1',
+                marginBottom: '3px',
+                lineHeight: '1.2',
               }}
             >
               Tax Invoice
@@ -149,7 +149,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           <img
             src="/logo-Photoroom.png"
             alt="Pearls by Mangatrai Logo"
-            style={{ maxWidth: '110px', height: 'auto' }}
+            style={{ maxWidth: '130px', height: 'auto' }}
           />
         </div>
 
@@ -157,15 +157,15 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
         <div style={{ textAlign: 'center', marginBottom: '2px' }}>
           <div
             style={{
-              fontSize: '13px',
+              fontSize: '15px',
               fontWeight: 'bold',
-              marginBottom: '1px',
-              lineHeight: '1.1',
+              marginBottom: '2px',
+              lineHeight: '1.2',
             }}
           >
             {business.name}
           </div>
-          <div style={{ fontSize: '9px', lineHeight: '1.2' }}>{business.legalName}</div>
+          <div style={{ fontSize: '10px', lineHeight: '1.3' }}>{business.legalName}</div>
         </div>
 
         {/* Row 4: Address (center) */}
@@ -213,8 +213,8 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
         <div
           style={{
             borderTop: '2px solid #000',
-            marginTop: '2px',
-            marginBottom: '2px',
+            marginTop: '4px',
+            marginBottom: '4px',
           }}
         />
 
@@ -232,7 +232,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <td
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '3px 4px',
                   width: '33.33%',
                 }}
               >
@@ -242,7 +242,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <td
                 style={{
                   border: '1px solid #000',
-                  padding: '2px 3px',
+                  padding: '3px 4px',
                   width: '33.33%',
                 }}
               >
@@ -252,7 +252,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <td
                 style={{
                   border: '1px solid #000',
-                  padding: '2px 3px',
+                  padding: '3px 4px',
                   width: '33.33%',
                 }}
               >
@@ -261,28 +261,28 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               </td>
             </tr>
             <tr>
-              <td style={{ border: '1px solid #000', padding: '2px' }}>
+              <td style={{ border: '1px solid #000', padding: '3px 4px' }}>
                 <span style={{ fontWeight: 600 }}>Invoice Date:</span>{' '}
                 {metadata.invoiceDate}
               </td>
-              <td style={{ border: '1px solid #000', padding: '2px' }}>
+              <td style={{ border: '1px solid #000', padding: '3px 4px' }}>
                 <span style={{ fontWeight: 600 }}>Order Date:</span>{' '}
                 {metadata.orderDate}
               </td>
-              <td style={{ border: '1px solid #000', padding: '2px' }}>
+              <td style={{ border: '1px solid #000', padding: '3px 4px' }}>
                 <span style={{ fontWeight: 600 }}>Date of Supply:</span>
               </td>
             </tr>
             <tr>
-              <td style={{ border: '1px solid #000', padding: '2px' }}>
+              <td style={{ border: '1px solid #000', padding: '3px 4px' }}>
                 <span style={{ fontWeight: 600 }}>State:</span>{' '}
                 {metadata.state}
               </td>
-              <td style={{ border: '1px solid #000', padding: '2px' }}>
+              <td style={{ border: '1px solid #000', padding: '3px 4px' }}>
                 <span style={{ fontWeight: 600 }}>Code:</span>{' '}
                 {metadata.stateCode}
               </td>
-              <td style={{ border: '1px solid #000', padding: '2px' }}>
+              <td style={{ border: '1px solid #000', padding: '3px 4px' }}>
                 <span style={{ fontWeight: 600 }}>Place of Supply:</span>{' '}
                 {metadata.placeOfSupply}
               </td>
@@ -300,13 +300,14 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           }}
         >
           <thead>
-            <tr style={{ backgroundColor: '#f5f5f5' }}>
+            <tr style={{ backgroundColor: '#e8e8e8' }}>
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'center',
                   fontWeight: 600,
+                  width: '50%',
                 }}
               >
                 BILL TO PARTY
@@ -314,9 +315,10 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'center',
                   fontWeight: 600,
+                  width: '50%',
                 }}
               >
                 SHIP TO PARTY / DELIVERY ADDRESS
@@ -329,16 +331,16 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <td
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   verticalAlign: 'top',
                 }}
               >
-                <div style={{ fontWeight: 600 }}>{billToParty.name}</div>
-                <div>{billToParty.address}</div>
-                {billToParty.city && <div>{billToParty.city}</div>}
-                <div>Pin code - {billToParty.pincode}</div>
-                {billToParty.phone && <div>Phone: {billToParty.phone}</div>}
-                <div>GSTIN: {billToParty.gstin || '-'}</div>
+                <div style={{ fontWeight: 600, marginBottom: '2px' }}>{billToParty.name}</div>
+                <div style={{ marginBottom: '1px' }}>{billToParty.address}</div>
+                {billToParty.city && <div style={{ marginBottom: '1px' }}>{billToParty.city}</div>}
+                <div style={{ marginBottom: '1px' }}>Pin code - {billToParty.pincode}</div>
+                {billToParty.phone && <div style={{ marginBottom: '1px' }}>Phone: {billToParty.phone}</div>}
+                <div style={{ marginBottom: '1px' }}>GSTIN: {billToParty.gstin || '-'}</div>
                 <div>
                   State: {billToParty.state} &nbsp; Code {billToParty.stateCode}{' '}
                   &nbsp; Country: {billToParty.country}
@@ -349,16 +351,16 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <td
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   verticalAlign: 'top',
                 }}
               >
-                <div style={{ fontWeight: 600 }}>{shipToParty.name}</div>
-                <div>{shipToParty.address}</div>
-                {shipToParty.city && <div>{shipToParty.city}</div>}
-                <div>Pin code - {shipToParty.pincode}</div>
-                {shipToParty.phone && <div>Phone: {shipToParty.phone}</div>}
-                <div>GSTIN: {shipToParty.gstin || '-'}</div>
+                <div style={{ fontWeight: 600, marginBottom: '2px' }}>{shipToParty.name}</div>
+                <div style={{ marginBottom: '1px' }}>{shipToParty.address}</div>
+                {shipToParty.city && <div style={{ marginBottom: '1px' }}>{shipToParty.city}</div>}
+                <div style={{ marginBottom: '1px' }}>Pin code - {shipToParty.pincode}</div>
+                {shipToParty.phone && <div style={{ marginBottom: '1px' }}>Phone: {shipToParty.phone}</div>}
+                <div style={{ marginBottom: '1px' }}>GSTIN: {shipToParty.gstin || '-'}</div>
                 <div>
                   State: {shipToParty.state} &nbsp; Code {shipToParty.stateCode}{' '}
                   &nbsp; Country: {shipToParty.country}
@@ -379,13 +381,14 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           }}
         >
           <thead>
-            <tr style={{ backgroundColor: '#f5f5f5' }}>
-              <th style={{ border: '1px solid #000', padding: '2px' }}>#</th>
+            <tr style={{ backgroundColor: '#e8e8e8' }}>
+              <th style={{ border: '1px solid #000', padding: '4px', width: '3%' }}>#</th>
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'left',
+                  width: '25%',
                 }}
               >
                 ITEM - SKU
@@ -393,9 +396,9 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'center',
-                  width: '35px',
+                  width: '5%',
                 }}
               >
                 QTY
@@ -403,8 +406,9 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'right',
+                  width: '10%',
                 }}
               >
                 RATE PER ITEM (₹)
@@ -412,8 +416,9 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'right',
+                  width: '10%',
                 }}
               >
                 DISCOUNT (ITEM ₹)
@@ -421,8 +426,9 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'right',
+                  width: '10%',
                 }}
               >
                 TAXABLE (ITEM ₹)
@@ -430,9 +436,9 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'center',
-                  width: '55px',
+                  width: '8%',
                 }}
               >
                 HSN
@@ -440,9 +446,9 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'center',
-                  width: '50px',
+                  width: '7%',
                 }}
               >
                 GST (%)
@@ -450,8 +456,9 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'right',
+                  width: '10%',
                 }}
               >
                 IGST (₹)
@@ -459,8 +466,9 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <th
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'right',
+                  width: '12%',
                 }}
               >
                 TOTAL (₹)
@@ -470,16 +478,16 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           <tbody>
             {lineItems.map((item) => (
               <tr key={item.sno}>
-                <td style={{ border: '1px solid #000', padding: '2px' }}>
+                <td style={{ border: '1px solid #000', padding: '4px' }}>
                   {item.sno}
                 </td>
-                <td style={{ border: '1px solid #000', padding: '2px' }}>
+                <td style={{ border: '1px solid #000', padding: '4px' }}>
                   {item.itemName} - {item.sku}
                 </td>
                 <td
                   style={{
                     border: '1px solid #000',
-                    padding: '2px',
+                    padding: '4px',
                     textAlign: 'center',
                   }}
                 >
@@ -488,7 +496,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                 <td
                   style={{
                     border: '1px solid #000',
-                    padding: '2px',
+                    padding: '4px',
                     textAlign: 'right',
                   }}
                 >
@@ -497,7 +505,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                 <td
                   style={{
                     border: '1px solid #000',
-                    padding: '2px',
+                    padding: '4px',
                     textAlign: 'right',
                   }}
                 >
@@ -506,7 +514,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                 <td
                   style={{
                     border: '1px solid #000',
-                    padding: '2px',
+                    padding: '4px',
                     textAlign: 'right',
                   }}
                 >
@@ -515,7 +523,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                 <td
                   style={{
                     border: '1px solid #000',
-                    padding: '2px',
+                    padding: '4px',
                     textAlign: 'center',
                   }}
                 >
@@ -524,7 +532,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                 <td
                   style={{
                     border: '1px solid #000',
-                    padding: '2px',
+                    padding: '4px',
                     textAlign: 'center',
                   }}
                 >
@@ -533,7 +541,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                 <td
                   style={{
                     border: '1px solid #000',
-                    padding: '2px',
+                    padding: '4px',
                     textAlign: 'right',
                   }}
                 >
@@ -546,7 +554,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                 <td
                   style={{
                     border: '1px solid #000',
-                    padding: '2px',
+                    padding: '4px',
                     textAlign: 'right',
                   }}
                 >
@@ -563,8 +571,8 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                     key={cIdx}
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
-                      height: '10px',
+                      padding: '4px',
+                      height: '12px',
                     }}
                   />
                 ))}
@@ -572,13 +580,13 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
             ))}
 
             {/* TOTAL ROW (like PDF) */}
-            <tr style={{ backgroundColor: '#f5f5f5', fontWeight: 600 }}>
+            <tr style={{ backgroundColor: '#e8e8e8', fontWeight: 700 }}>
               <td
                 colSpan={2}
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
-                  fontWeight: 600,
+                  padding: '4px',
+                  fontWeight: 700,
                 }}
               >
                 TOTAL
@@ -586,23 +594,23 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               <td
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'center',
-                  fontWeight: 600,
+                  fontWeight: 700,
                 }}
               >
                 {totalQuantity}
               </td>
               <td
                 colSpan={6}
-                style={{ border: '1px solid #000', padding: '2px' }}
+                style={{ border: '1px solid #000', padding: '4px' }}
               />
               <td
                 style={{
                   border: '1px solid #000',
-                  padding: '2px',
+                  padding: '4px',
                   textAlign: 'right',
-                  fontWeight: 600,
+                  fontWeight: 700,
                 }}
               >
                 {formatAmount(
@@ -618,9 +626,9 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           className="grid grid-cols-2 gap-4 mb-2"
           style={{
             display: 'grid',
-            gridTemplateColumns: '1.4fr 1fr',
-            gap: '8px',
-            marginBottom: '2px',
+            gridTemplateColumns: '1.2fr 1fr',
+            gap: '12px',
+            marginBottom: '4px',
           }}
         >
           {/* LEFT: Payment mode + T&C + Amount in words (single box like PDF) */}
@@ -638,7 +646,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                     }}
                   >
                     <span style={{ fontWeight: 600 }}>Payment Mode:</span>{' '}
@@ -662,7 +670,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                     style={{
                       borderLeft: '1px solid #000',
                       borderRight: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       fontWeight: 600,
                     }}
                   >
@@ -674,7 +682,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                     style={{
                       borderLeft: '1px solid #000',
                       borderRight: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       fontSize: '7px',
                     }}
                   >
@@ -690,14 +698,14 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       fontSize: '8px',
                     }}
                   >
-                    <div style={{ fontWeight: 600, marginBottom: '1px' }}>
+                    <div style={{ fontWeight: 600, marginBottom: '2px' }}>
                       Total Invoice Amount in Words
                     </div>
-                    <div style={{ fontWeight: 600, fontSize: '9px' }}>
+                    <div style={{ fontWeight: 600, fontSize: '10px' }}>
                       {amountInWords}
                     </div>
                   </td>
@@ -720,7 +728,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                     }}
                   >
                     Total amount before Tax(₹)
@@ -728,7 +736,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       textAlign: 'right',
                     }}
                   >
@@ -739,7 +747,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                     }}
                   >
                     Total Tax amount(₹)
@@ -747,7 +755,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       textAlign: 'right',
                     }}
                   >
@@ -758,7 +766,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                     }}
                   >
                     Discount
@@ -769,7 +777,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       textAlign: 'right',
                     }}
                   >
@@ -782,7 +790,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                     }}
                   >
                     Shipping amount(₹)
@@ -790,7 +798,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       textAlign: 'right',
                     }}
                   >
@@ -801,7 +809,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                     }}
                   >
                     Total amount after Tax(₹)
@@ -809,7 +817,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       textAlign: 'right',
                     }}
                   >
@@ -820,7 +828,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                     }}
                   >
                     Round off
@@ -828,7 +836,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       textAlign: 'right',
                     }}
                   >
@@ -839,7 +847,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       fontWeight: 700,
                     }}
                   >
@@ -848,10 +856,10 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                   <td
                     style={{
                       border: '1px solid #000',
-                      padding: '2px',
+                      padding: '4px',
                       textAlign: 'right',
                       fontWeight: 700,
-                      fontSize: '10px',
+                      fontSize: '11px',
                     }}
                   >
                     {formatAmount(finalTotal)}
@@ -865,14 +873,14 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
         {/* ======== FOOTER: E&O, PAID stamp, signature (layout like PDF) ======== */}
         <div
           style={{
-            marginTop: '2px',
+            marginTop: '8px',
             borderTop: '1px solid #999',
-            paddingTop: '2px',
+            paddingTop: '4px',
             fontSize: '8px',
-            paddingBottom: '2px',
+            paddingBottom: '4px',
           }}
         >
-          <div style={{ marginBottom: '2px', fontWeight: 600 }}>E & O.E</div>
+          <div style={{ marginBottom: '4px', fontWeight: 600 }}>E & O.E</div>
 
           {/* Fixed footer band with aligned items */}
           <div
@@ -881,16 +889,18 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              minHeight: '45px',
+              minHeight: '55px',
             }}
           >
-            {/* PAID stamp (left) */}
+            {/* Left section with E&O.E and PAID stamp */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flex: '0 0 auto' }}>
+              {/* PAID stamp (center-left) */}
             {stampType && (
               <div
                 style={{
                   position: 'relative',
                   width: '100px',
-                  height: '45px',
+                    height: '55px',
                   display: 'flex',
                   alignItems: 'center',
                 }}
@@ -898,15 +908,15 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                 <div
                   style={{
                     position: 'absolute',
-                    top: '50%',
+                      top: '65%',
                     left: '50%',
                     transform: 'translate(-50%, -50%) rotate(-20deg)',
-                    width: '85px',
-                    height: '35px',
+                    width: '100px',
+                    height: '40px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    border: `3px solid ${
+                    border: `4px solid ${
                       stampType === 'paid'
                         ? '#2563eb'
                         : stampType === 'cancelled'
@@ -915,8 +925,8 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                         ? '#f59e0b'
                         : '#6b7280'
                     }`,
-                    backgroundColor: 'rgba(255,255,255,0.8)',
-                    opacity: 0.8,
+                    backgroundColor: 'rgba(255,255,255,0.9)',
+                    opacity: 0.85,
                   }}
                 >
                   <span
@@ -930,8 +940,8 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                           ? '#f59e0b'
                           : '#6b7280',
                       fontWeight: 'bold',
-                      fontSize: '16px',
-                      letterSpacing: '1px',
+                      fontSize: '18px',
+                      letterSpacing: '2px',
                     }}
                   >
                     {stampType === 'paid'
@@ -945,12 +955,13 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
                 </div>
               </div>
             )}
+            </div>
 
             {/* Empty center space */}
             <div style={{ flex: 1 }} />
 
             {/* Signature text (right) */}
-            <div style={{ textAlign: 'right', fontSize: '8px' }}>
+            <div style={{ textAlign: 'right', fontSize: '8px', marginTop: '8px' }}>
               <div style={{ fontWeight: 600, marginBottom: '4px' }}>
                 For, {business.legalName}
               </div>
@@ -967,7 +978,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           style={{
             width: '100%',
             padding: '2px 0 0 0',
-            marginTop: '2px',
+            marginTop: '16px',
             fontSize: '8px',
             color: '#666',
             display: 'flex',
@@ -975,8 +986,8 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
             alignItems: 'center',
           }}
         >
-          <div style={{ fontWeight: 'bold', color: '#000' }}>* Subject to Hyderabad Jurisdiction Only</div>
-          <div>Generated from {business.name} - Page 1 of 1</div>
+          <div style={{ fontWeight: 'bold', color: '#000', fontSize: '9px' }}>* Subject to Hyderabad Jurisdiction Only</div>
+          <div style={{ fontSize: '9px' }}>Generated from {business.name} - Page 1 of 1</div>
         </div>
       </div>
 
@@ -984,107 +995,73 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
       <style jsx global>{`
         @media print {
           @page {
-            size: A4;
-            margin: 0;
+            size: A4 portrait;
+            margin: 2mm;
           }
+          
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
           html, body {
+            width: 210mm;
+            height: 297mm;
             margin: 0 !important;
             padding: 0 !important;
-            height: auto !important;
             overflow: hidden !important;
           }
-          body {
-            margin: 0 !important;
-            padding: 0 !important;
-            height: auto !important;
+          
+          body * {
+            visibility: hidden;
           }
+          
+          .invoice-template,
+          .invoice-template * {
+            visibility: visible;
+          }
+          
           .invoice-template {
-            page-break-before: avoid !important;
-            page-break-after: avoid !important;
-            margin: 0 !important;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
             padding: 0 !important;
-            height: auto !important;
+            margin: 0 !important;
+            background: white !important;
           }
+          
           .invoice-page {
             width: 210mm !important;
+            min-width: 210mm !important;
             max-width: 210mm !important;
-            height: auto !important;
-            min-height: auto !important;
+            height: 297mm !important;
+            min-height: 297mm !important;
             max-height: 297mm !important;
-            padding: 3mm 4mm !important;
-            margin: 0 auto !important;
-            page-break-after: avoid !important;
-            page-break-inside: avoid !important;
-            page-break-before: avoid !important;
+            padding: 8mm !important;
+            border: 2.5px solid #000 !important;
+            box-sizing: border-box !important;
+            margin: 0 !important;
+            position: relative !important;
             overflow: hidden !important;
-          }
-          .invoice-template > div:first-child {
-            margin-top: 3mm !important;
-            margin-bottom: 0 !important;
-            page-break-inside: avoid !important;
             page-break-after: avoid !important;
+            page-break-inside: avoid !important;
           }
-          /* Prevent line items table from breaking - keep everything on one page */
+          
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          
           .line-items-table {
             page-break-inside: avoid !important;
           }
-          .line-items-table thead {
-            display: table-header-group;
-          }
-          .line-items-table tbody {
-            display: table-row-group;
-          }
-          .line-items-table tr {
-            page-break-inside: avoid !important;
-            page-break-after: avoid !important;
-          }
-          /* Keep table header on each page */
-          .line-items-table thead tr {
-            page-break-after: avoid !important;
-            page-break-inside: avoid !important;
-          }
-          /* Keep all tables together */
-          table {
-            page-break-inside: avoid !important;
-          }
-          /* Keep header sections together (Tax Invoice, logo, company info, etc.) */
-          .invoice-template > div:first-child > div:first-child,
-          .invoice-template > div:first-child > div:nth-child(2),
-          .invoice-template > div:first-child > div:nth-child(3),
-          .invoice-template > div:first-child > div:nth-child(4),
-          .invoice-template > div:first-child > div:nth-child(5),
-          .invoice-template > div:first-child > div:nth-child(6) {
-            page-break-inside: avoid !important;
-          }
-          /* Keep totals and payment section together */
-          .invoice-template > div:first-child > div:nth-last-child(2) {
-            page-break-inside: avoid !important;
-            page-break-before: avoid !important;
-          }
-          .invoice-template > div:last-child {
-            page-break-after: avoid !important;
-            page-break-before: avoid !important;
-          }
-          /* Prevent blank pages - hide empty elements */
-          .invoice-template > div:empty,
-          body > div:empty,
-          html > body > div:empty {
-            display: none !important;
-            height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          /* Prevent any element after invoice from creating pages */
-          .invoice-template ~ * {
-            display: none !important;
-          }
-          /* Ensure no orphaned content creates pages */
-          * {
-            page-break-after: auto !important;
-          }
-          .invoice-page,
+        }
+        
+        @media screen {
           .invoice-template {
-            page-break-after: avoid !important;
+            background: #f5f5f5;
           }
         }
       `}</style>

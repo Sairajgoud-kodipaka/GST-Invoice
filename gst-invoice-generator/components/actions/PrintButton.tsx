@@ -55,92 +55,70 @@ export function PrintButton({ invoice }: PrintButtonProps) {
       align-items: flex-start;
     }
       @media print {
-      @page {
-        size: A4;
-        margin: 2mm;
+        @page {
+          size: A4 portrait;
+          margin: 2mm;
+        }
+        
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+        }
+        
+        html, body {
+          width: 210mm;
+          height: 297mm;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+        }
+        
+        body * {
+          visibility: hidden;
+        }
+        
+        .invoice-template,
+        .invoice-template * {
+          visibility: visible;
+        }
+        
+        .invoice-template {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          padding: 0 !important;
+          margin: 0 !important;
+          background: white !important;
+        }
+        
+        .invoice-page {
+          width: 210mm !important;
+          min-width: 210mm !important;
+          max-width: 210mm !important;
+          height: 297mm !important;
+          min-height: 297mm !important;
+          max-height: 297mm !important;
+          padding: 8mm !important;
+          border: 2.5px solid #000 !important;
+          box-sizing: border-box !important;
+          margin: 0 !important;
+          position: relative !important;
+          overflow: hidden !important;
+          page-break-after: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        
+        table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+        }
+        
+        .line-items-table {
+          page-break-inside: avoid !important;
+        }
       }
-      html, body {
-        margin: 0 !important;
-        padding: 0 !important;
-        width: 100%;
-        height: auto !important;
-        overflow: hidden !important;
-      }
-      body {
-        display: block;
-        background: white;
-        height: auto !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-      .invoice-template {
-        margin: 0 !important;
-        padding: 0 !important;
-        background: white;
-        page-break-after: avoid !important;
-        height: auto !important;
-      }
-      /* Each invoice page gets a border */
-      .invoice-page {
-        width: 210mm !important;
-        max-width: 210mm !important;
-        height: auto !important;
-        min-height: auto !important;
-        max-height: 297mm !important;
-        margin: 0 auto !important;
-        border: 2px solid #000 !important;
-        box-sizing: border-box !important;
-        page-break-after: avoid !important;
-        page-break-inside: avoid !important;
-        page-break-before: avoid !important;
-        overflow: hidden !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-      /* Keep line items table on one page */
-      .line-items-table {
-        page-break-inside: avoid !important;
-      }
-      .line-items-table thead {
-        display: table-header-group;
-      }
-      .line-items-table tbody {
-        display: table-row-group;
-      }
-      .line-items-table tr {
-        page-break-inside: avoid !important;
-        page-break-after: avoid !important;
-      }
-      /* Keep all tables together */
-      table {
-        page-break-inside: avoid !important;
-      }
-      /* Ensure borders print */
-      * {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-      table, td, th {
-        border: 1px solid #000 !important;
-      }
-      /* Prevent blank pages - hide empty elements */
-      .invoice-template > div:empty,
-      body > div:empty {
-        display: none !important;
-        height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-      /* Prevent any element after invoice from creating pages */
-      .invoice-template ~ * {
-        display: none !important;
-      }
-      /* Ensure no orphaned content creates pages */
-      .invoice-page,
-      .invoice-template {
-        page-break-after: avoid !important;
-      }
-    }
   </style>
 </head>
 <body>

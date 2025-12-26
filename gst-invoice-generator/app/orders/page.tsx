@@ -994,7 +994,21 @@ function OrdersContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate batch PDF');
+        let errorMessage = 'Failed to generate batch PDF';
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } else {
+            const errorText = await response.text();
+            errorMessage = errorText || errorMessage;
+          }
+        } catch (parseError) {
+          // If parsing fails, use default message
+          console.error('Error parsing error response:', parseError);
+        }
+        throw new Error(errorMessage);
       }
 
       const blob = await response.blob();

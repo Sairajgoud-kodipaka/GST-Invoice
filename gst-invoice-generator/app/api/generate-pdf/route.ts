@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
 import { InvoiceData } from '@/app/types/invoice';
+
+// Import puppeteer packages - use puppeteer for local (includes Chromium), puppeteer-core for Vercel
+import puppeteerLocal from 'puppeteer';
+import puppeteerCore from 'puppeteer-core';
+
+// Helper function to safely close a page
+async function safeClosePage(page: any) {
+  try {
+    if (page) {
+      await page.close();
+    }
+  } catch (error: any) {
+    // Page might already be closed or connection lost, ignore the error
+    if (error?.message && !error.message.includes('Target closed') && !error.message.includes('Connection closed')) {
+      console.warn('Error closing page:', error);
+    }
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,7 +59,10 @@ export async function POST(request: NextRequest) {
 
     // Launch browser with timeout protection
     // Configure for Vercel serverless environment
-    const isVercel = process.env.VERCEL === '1';
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
+    // Use puppeteer (with bundled Chromium) for local dev, puppeteer-core for Vercel
+    const puppeteer = (isVercel ? puppeteerCore : puppeteerLocal) as any;
+    
     let browser;
     try {
       let launchOptions: any;
@@ -50,15 +70,22 @@ export async function POST(request: NextRequest) {
       if (isVercel) {
         // Use @sparticuz/chromium configuration for Vercel
         // This includes all necessary system libraries bundled
+        const executablePath = await chromium.executablePath();
+        
+        // Verify executable path is available
+        if (!executablePath) {
+          throw new Error('Chromium executable path not found. Make sure @sparticuz/chromium is properly installed.');
+        }
+
         launchOptions = {
           args: chromium.args,
           defaultViewport: chromium.defaultViewport,
-          executablePath: await chromium.executablePath(),
-          headless: true,
+          executablePath: executablePath,
+          headless: chromium.headless,
           timeout: 30000,
         };
       } else {
-        // Local development configuration
+        // Local development configuration - use regular puppeteer which includes Chromium
         launchOptions = {
           headless: true,
           args: [
@@ -88,9 +115,12 @@ export async function POST(request: NextRequest) {
 
     try {
       // Get base URL for invoice preview
-      const protocol = request.headers.get('x-forwarded-proto') || 'http';
-      const host = request.headers.get('host') || 'localhost:3000';
-      const baseUrl = `${protocol}://${host}`;
+      // For local dev, try to detect the actual port from environment or use default
+      const protocol = request.headers.get('x-forwarded-proto') || 
+                       (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+      const host = request.headers.get('host') || 
+                   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'localhost:3000');
+      const baseUrl = host.startsWith('http') ? host : `${protocol}://${host}`;
 
       if (batch && invoices.length > 1) {
         // Generate single PDF with multiple invoices (batch mode)
@@ -99,79 +129,108 @@ export async function POST(request: NextRequest) {
 
         for (const invoice of invoices as InvoiceData[]) {
           const page = await browser.newPage();
-          await page.setViewport({ width: 794, height: 1123 }); // A4 size in pixels at 96 DPI
-          const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
-          
           try {
-            await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
-              waitUntil: 'networkidle0',
-              timeout: 30000,
-            });
-          } catch (error) {
-            await page.close();
-            throw new Error(`Failed to load invoice page: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          }
-          
-          // Wait a bit more to ensure all content is rendered
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Inject CSS to prevent blank pages
-          await page.addStyleTag({
-            content: `
-              @media print {
-                html, body {
-                  height: auto !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                }
-                .invoice-template ~ * {
-                  display: none !important;
-                }
-                body > div:empty {
-                  display: none !important;
-                  height: 0 !important;
-                }
-              }
-            `
-          });
-          
-          // Remove any empty elements that might cause blank pages
-          await page.evaluate(() => {
-            const body = document.body;
-            if (body) {
-              // Remove empty divs
-              const allDivs = body.querySelectorAll('div');
-              allDivs.forEach(div => {
-                if (div.children.length === 0 && div.textContent?.trim() === '') {
-                  div.remove();
+            // Set viewport FIRST, then emulate print (order matters)
+            await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
+            
+            // Emulate print media AFTER viewport to ensure @page rules work
+            await page.emulateMediaType('print');
+            const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
+            
+            try {
+              await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
+                waitUntil: 'domcontentloaded',
+                timeout: 30000,
+              });
+              // Wait for invoice to be fully rendered
+              await page.waitForSelector('.invoice-template', { timeout: 10000 });
+              // Additional wait for any async content
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (error: unknown) {
+              await safeClosePage(page);
+              throw new Error(`Failed to load invoice page: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+            
+            // Inject CSS - ensure print properties match master styles
+            try {
+              await page.addStyleTag({
+                content: `
+                  @page {
+                    size: A4 portrait;
+                    margin: 0;
+                  }
+                  
+                  * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                  }
+                  
+                  .invoice-page {
+                    width: 210mm !important;
+                    height: 297mm !important;
+                    padding: 8mm !important;
+                    border: 2.5px solid #000 !important;
+                    box-sizing: border-box !important;
+                  }
+                `
+              });
+            } catch (error: unknown) {
+              await safeClosePage(page);
+              throw new Error(`Failed to inject styles: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+            
+            // Remove any empty elements that might cause blank pages
+            try {
+              await page.evaluate(() => {
+                const body = document.body;
+                if (body) {
+                  // Remove empty divs
+                  const allDivs = body.querySelectorAll('div');
+                  allDivs.forEach(div => {
+                    if (div.children.length === 0 && div.textContent?.trim() === '') {
+                      div.remove();
+                    }
+                  });
+                  // Remove any elements after invoice template
+                  const invoiceTemplate = body.querySelector('.invoice-template');
+                  if (invoiceTemplate) {
+                    let nextSibling = invoiceTemplate.nextElementSibling;
+                    while (nextSibling) {
+                      const toRemove = nextSibling;
+                      nextSibling = nextSibling.nextElementSibling;
+                      toRemove.remove();
+                    }
+                  }
                 }
               });
-              // Remove any elements after invoice template
-              const invoiceTemplate = body.querySelector('.invoice-template');
-              if (invoiceTemplate) {
-                let nextSibling = invoiceTemplate.nextElementSibling;
-                while (nextSibling) {
-                  const toRemove = nextSibling;
-                  nextSibling = nextSibling.nextElementSibling;
-                  toRemove.remove();
-                }
-              }
+            } catch (error: unknown) {
+              await safeClosePage(page);
+              throw new Error(`Failed to clean up page: ${error instanceof Error ? error.message : 'Unknown error'}`);
             }
-          });
-          
-          const pdfBytes = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: { top: '2mm', right: '2mm', bottom: '2mm', left: '2mm' },
-            preferCSSPageSize: true,
-            displayHeaderFooter: false,
-          });
-          await page.close();
+            
+            let pdfBytes;
+            try {
+              pdfBytes = await page.pdf({
+                format: 'A4',
+                printBackground: true,
+                preferCSSPageSize: true,
+                margin: { top: '2mm', right: '2mm', bottom: '2mm', left: '2mm' },
+              });
+            } catch (error: unknown) {
+              await safeClosePage(page);
+              throw new Error(`Failed to generate PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+            
+            await safeClosePage(page);
 
-          // Merge this invoice PDF into the main document
-          const invoicePdf = await PDFDocument.load(pdfBytes);
-          const pages = await pdfDoc.copyPages(invoicePdf, invoicePdf.getPageIndices());
-          pages.forEach((page) => pdfDoc.addPage(page));
+            // Merge this invoice PDF into the main document
+            const invoicePdf = await PDFDocument.load(pdfBytes);
+            const pages = await pdfDoc.copyPages(invoicePdf, invoicePdf.getPageIndices());
+            pages.forEach((page) => pdfDoc.addPage(page));
+          } catch (error) {
+            await safeClosePage(page);
+            throw error;
+          }
         }
 
         const mergedPdfBytes = await pdfDoc.save();
@@ -194,69 +253,127 @@ export async function POST(request: NextRequest) {
         // Generate single PDF
         const invoice = invoices[0] as InvoiceData;
         const page = await browser.newPage();
-        await page.setViewport({ width: 794, height: 1123 }); // A4 size in pixels at 96 DPI
-        
-        // Encode invoice data and navigate to invoice render page (uses InvoiceTemplate component)
-        const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
         try {
-          await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
-            waitUntil: 'networkidle0',
-            timeout: 30000,
+          // Set viewport FIRST, then emulate print (order matters)
+          await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
+          
+          // Emulate print media AFTER viewport to ensure @page rules work
+          // But our CSS won't override inline styles
+          await page.emulateMediaType('print');
+          
+          // Encode invoice data and navigate to invoice render page (uses InvoiceTemplate component)
+          const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
+          try {
+            await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 30000,
+            });
+            // Wait for invoice to be fully rendered
+            await page.waitForSelector('.invoice-template', { timeout: 10000 });
+            // Additional wait for any async content
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } catch (error: unknown) {
+            await safeClosePage(page);
+            throw new Error(`Failed to load invoice page: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+          
+          // CRITICAL: Force inline styles to match master print styles
+          try {
+            await page.evaluate(() => {
+              const invoicePage = document.querySelector('.invoice-page') as HTMLElement;
+              if (invoicePage) {
+                // Force the exact styles from master print styles
+                invoicePage.style.setProperty('width', '210mm', 'important');
+                invoicePage.style.setProperty('min-width', '210mm', 'important');
+                invoicePage.style.setProperty('max-width', '210mm', 'important');
+                invoicePage.style.setProperty('height', '297mm', 'important');
+                invoicePage.style.setProperty('min-height', '297mm', 'important');
+                invoicePage.style.setProperty('max-height', '297mm', 'important');
+                invoicePage.style.setProperty('padding', '8mm', 'important');
+                invoicePage.style.setProperty('border', '2.5px solid #000', 'important');
+                invoicePage.style.setProperty('position', 'relative', 'important');
+                invoicePage.style.setProperty('box-sizing', 'border-box', 'important');
+                invoicePage.style.setProperty('margin', '0', 'important');
+                invoicePage.style.setProperty('background-color', 'white', 'important');
+                invoicePage.style.setProperty('overflow', 'hidden', 'important');
+              }
+            });
+          } catch (error) {
+            await safeClosePage(page);
+            throw new Error(`Failed to force inline styles: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+          
+          // Inject CSS for print-specific properties
+          try {
+            await page.addStyleTag({
+              content: `
+                @page {
+                  size: A4 portrait;
+                  margin: 0;
+                }
+                
+                * {
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                
+                .invoice-page {
+                  width: 210mm !important;
+                  height: 297mm !important;
+                  padding: 8mm !important;
+                  border: 2.5px solid #000 !important;
+                  box-sizing: border-box !important;
+                }
+              `
+            });
+          } catch (error) {
+            await safeClosePage(page);
+            throw new Error(`Failed to inject styles: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+          
+          // Remove any empty elements that might cause blank pages
+          try {
+            await page.evaluate(() => {
+              const emptyElements = document.querySelectorAll('body > div:empty, body > div:not(:has(*))');
+              emptyElements.forEach(el => el.remove());
+            });
+          } catch (error) {
+            await safeClosePage(page);
+            throw new Error(`Failed to clean up page: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+          
+          let pdf;
+          try {
+            // Generate PDF with small margin to prevent border clipping
+            // 2mm margin ensures the 2.5px border is fully visible on all sides
+            pdf = await page.pdf({
+              format: 'A4',
+              printBackground: true,
+              preferCSSPageSize: true,
+              margin: { top: '2mm', right: '2mm', bottom: '2mm', left: '2mm' },
+            });
+          } catch (error) {
+            await safeClosePage(page);
+            throw new Error(`Failed to generate PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+          
+          await safeClosePage(page);
+
+          // Sanitize filename to remove invalid characters
+          const sanitizeFilename = (filename: string) => filename.replace(/[<>:"/\\|?*]/g, '_');
+          const invoiceNo = sanitizeFilename(invoice.metadata.invoiceNo || 'invoice');
+          const orderNo = sanitizeFilename(invoice.metadata.orderNo || 'order');
+
+          return new NextResponse(pdf as any, {
+            headers: {
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': `attachment; filename="Invoice_${invoiceNo}_${orderNo}.pdf"`,
+            },
           });
         } catch (error) {
-          await page.close();
-          throw new Error(`Failed to load invoice page: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          await safeClosePage(page);
+          throw error;
         }
-        
-        // Wait a bit more to ensure all content is rendered
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Inject CSS to prevent blank pages
-        await page.addStyleTag({
-          content: `
-            @media print {
-              html, body {
-                height: auto !important;
-                margin: 0 !important;
-                padding: 0 !important;
-              }
-              .invoice-template ~ * {
-                display: none !important;
-              }
-              body > div:empty {
-                display: none !important;
-                height: 0 !important;
-              }
-            }
-          `
-        });
-        
-        // Remove any empty elements that might cause blank pages
-        await page.evaluate(() => {
-          const emptyElements = document.querySelectorAll('body > div:empty, body > div:not(:has(*))');
-          emptyElements.forEach(el => el.remove());
-        });
-        
-        const pdf = await page.pdf({
-          format: 'A4',
-          printBackground: true,
-          margin: { top: '2mm', right: '2mm', bottom: '2mm', left: '2mm' },
-          preferCSSPageSize: true,
-          displayHeaderFooter: false,
-        });
-        await page.close();
-
-        // Sanitize filename to remove invalid characters
-        const sanitizeFilename = (filename: string) => filename.replace(/[<>:"/\\|?*]/g, '_');
-        const invoiceNo = sanitizeFilename(invoice.metadata.invoiceNo || 'invoice');
-        const orderNo = sanitizeFilename(invoice.metadata.orderNo || 'order');
-
-        return new NextResponse(pdf as any, {
-          headers: {
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename="Invoice_${invoiceNo}_${orderNo}.pdf"`,
-          },
-        });
       } else {
         // Generate multiple PDFs and zip them
         const zip = new JSZip();
@@ -266,73 +383,136 @@ export async function POST(request: NextRequest) {
 
         for (const invoice of invoices as InvoiceData[]) {
           const page = await browser.newPage();
-          await page.setViewport({ width: 794, height: 1123 }); // A4 size in pixels at 96 DPI
-          const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
-          
-          await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
-            waitUntil: 'networkidle0',
-          });
-          
-          // Wait a bit more to ensure all content is rendered
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Inject CSS to prevent blank pages
-          await page.addStyleTag({
-            content: `
-              @media print {
-                html, body {
-                  height: auto !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                }
-                .invoice-template ~ * {
-                  display: none !important;
-                }
-                body > div:empty {
-                  display: none !important;
-                  height: 0 !important;
-                }
-              }
-            `
-          });
-          
-          // Remove any empty elements that might cause blank pages
-          await page.evaluate(() => {
-            const body = document.body;
-            if (body) {
-              // Remove empty divs
-              const allDivs = body.querySelectorAll('div');
-              allDivs.forEach(div => {
-                if (div.children.length === 0 && div.textContent?.trim() === '') {
-                  div.remove();
+          try {
+            // Set viewport FIRST, then emulate print (order matters)
+            await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
+            
+            // Emulate print media AFTER viewport to ensure @page rules work
+            await page.emulateMediaType('print');
+            
+            const invoiceDataBase64 = Buffer.from(JSON.stringify(invoice)).toString('base64');
+            
+            try {
+              await page.goto(`${baseUrl}/invoice-render?data=${encodeURIComponent(invoiceDataBase64)}`, {
+                waitUntil: 'domcontentloaded', // Changed from 'networkidle0' - more reliable
+                timeout: 30000,
+              });
+              // Wait for invoice to be fully rendered
+              await page.waitForSelector('.invoice-template', { timeout: 10000 });
+              // Additional wait for any async content
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (error: unknown) {
+              await safeClosePage(page);
+              throw new Error(`Failed to load invoice page: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+            
+            // Additional wait already done in goto catch block
+            
+            // CRITICAL: Force inline styles to match master print styles
+            try {
+              await page.evaluate(() => {
+                const invoicePage = document.querySelector('.invoice-page') as HTMLElement;
+                if (invoicePage) {
+                  // Force the exact styles from master print styles
+                  invoicePage.style.setProperty('width', '210mm', 'important');
+                  invoicePage.style.setProperty('min-width', '210mm', 'important');
+                  invoicePage.style.setProperty('max-width', '210mm', 'important');
+                  invoicePage.style.setProperty('height', '297mm', 'important');
+                  invoicePage.style.setProperty('min-height', '297mm', 'important');
+                  invoicePage.style.setProperty('max-height', '297mm', 'important');
+                  invoicePage.style.setProperty('padding', '8mm', 'important');
+                  invoicePage.style.setProperty('border', '2.5px solid #000', 'important');
+                  invoicePage.style.setProperty('position', 'relative', 'important');
+                  invoicePage.style.setProperty('box-sizing', 'border-box', 'important');
+                  invoicePage.style.setProperty('margin', '0', 'important');
+                  invoicePage.style.setProperty('background-color', 'white', 'important');
+                  invoicePage.style.setProperty('overflow', 'hidden', 'important');
                 }
               });
-              // Remove any elements after invoice template
-              const invoiceTemplate = body.querySelector('.invoice-template');
-              if (invoiceTemplate) {
-                let nextSibling = invoiceTemplate.nextElementSibling;
-                while (nextSibling) {
-                  const toRemove = nextSibling;
-                  nextSibling = nextSibling.nextElementSibling;
-                  toRemove.remove();
-                }
-              }
+            } catch (error: unknown) {
+              await safeClosePage(page);
+              throw new Error(`Failed to force inline styles: ${error instanceof Error ? error.message : 'Unknown error'}`);
             }
-          });
-          
-          const pdf = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: { top: '2mm', right: '2mm', bottom: '2mm', left: '2mm' },
-            preferCSSPageSize: true,
-            displayHeaderFooter: false,
-          });
-          
-          const invoiceNo = sanitizeFilename(invoice.metadata.invoiceNo || 'invoice');
-          const orderNo = sanitizeFilename(invoice.metadata.orderNo || 'order');
-          const filename = `Invoice_${invoiceNo}_${orderNo}.pdf`;
-          zip.file(filename, pdf);
-          await page.close();
+            
+            // Inject CSS for print-specific properties
+            try {
+              await page.addStyleTag({
+                content: `
+                  @page {
+                    size: A4 portrait;
+                    margin: 0;
+                  }
+                  
+                  * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                  }
+                  
+                  .invoice-page {
+                    width: 210mm !important;
+                    height: 297mm !important;
+                    padding: 8mm !important;
+                    border: 2.5px solid #000 !important;
+                    box-sizing: border-box !important;
+                  }
+                `
+              });
+            } catch (error: unknown) {
+              await safeClosePage(page);
+              throw new Error(`Failed to inject styles: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+            
+            // Remove any empty elements that might cause blank pages
+            try {
+              await page.evaluate(() => {
+                const body = document.body;
+                if (body) {
+                  // Remove empty divs
+                  const allDivs = body.querySelectorAll('div');
+                  allDivs.forEach(div => {
+                    if (div.children.length === 0 && div.textContent?.trim() === '') {
+                      div.remove();
+                    }
+                  });
+                  // Remove any elements after invoice template
+                  const invoiceTemplate = body.querySelector('.invoice-template');
+                  if (invoiceTemplate) {
+                    let nextSibling = invoiceTemplate.nextElementSibling;
+                    while (nextSibling) {
+                      const toRemove = nextSibling;
+                      nextSibling = nextSibling.nextElementSibling;
+                      toRemove.remove();
+                    }
+                  }
+                }
+              });
+            } catch (error: unknown) {
+              await safeClosePage(page);
+              throw new Error(`Failed to clean up page: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+            
+            let pdf;
+            try {
+              pdf = await page.pdf({
+                format: 'A4',
+                printBackground: true,
+                preferCSSPageSize: true,
+                margin: { top: '2mm', right: '2mm', bottom: '2mm', left: '2mm' },
+              });
+            } catch (error: unknown) {
+              await safeClosePage(page);
+              throw new Error(`Failed to generate PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+            
+            const invoiceNo = sanitizeFilename(invoice.metadata.invoiceNo || 'invoice');
+            const orderNo = sanitizeFilename(invoice.metadata.orderNo || 'order');
+            const filename = `Invoice_${invoiceNo}_${orderNo}.pdf`;
+            zip.file(filename, pdf);
+            await safeClosePage(page);
+          } catch (error: unknown) {
+            await safeClosePage(page);
+            throw error;
+          }
         }
 
         const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
