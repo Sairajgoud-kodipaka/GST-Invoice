@@ -75,3 +75,4 @@ I've updated your Puppeteer config with better Vercel-compatible settings:
 **Remember:** The 405 error when visiting the URL directly is normal. Test from your app's UI! 🎯
 
 
+
