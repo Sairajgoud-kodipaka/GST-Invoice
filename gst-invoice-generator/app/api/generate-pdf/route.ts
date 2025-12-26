@@ -45,24 +45,34 @@ export async function POST(request: NextRequest) {
     const isVercel = process.env.VERCEL === '1';
     let browser;
     try {
-      const launchOptions: any = {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process',
-          '--disable-gpu',
-        ],
-        timeout: 30000,
-      };
+      let launchOptions: any;
 
-      // Use @sparticuz/chromium on Vercel
       if (isVercel) {
-        launchOptions.executablePath = await chromium.executablePath();
+        // Use @sparticuz/chromium configuration for Vercel
+        // This includes all necessary system libraries bundled
+        launchOptions = {
+          args: chromium.args,
+          defaultViewport: chromium.defaultViewport,
+          executablePath: await chromium.executablePath(),
+          headless: true,
+          timeout: 30000,
+        };
+      } else {
+        // Local development configuration
+        launchOptions = {
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu',
+          ],
+          timeout: 30000,
+        };
       }
 
       browser = await puppeteer.launch(launchOptions);
