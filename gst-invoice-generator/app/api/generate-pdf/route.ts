@@ -36,12 +36,15 @@ async function getInvoiceHTML(invoice: InvoiceData, baseUrl: string): Promise<st
     });
     
     if (!response.ok) {
-      // Check if we got redirected to a login page
+      // Check if we got redirected to Vercel's deployment protection login
       const responseText = await response.text();
-      if (responseText.includes('vercel.com/login') || responseText.includes('login') || response.url?.includes('login')) {
+      const finalUrl = response.url || url;
+      if (finalUrl.includes('vercel.com/login') || responseText.includes('vercel.com/login')) {
         throw new Error(
-          `Access denied: The preview deployment URL requires authentication. ` +
-          `Please set NEXT_PUBLIC_APP_URL environment variable to your production domain. ` +
+          `Vercel Deployment Protection is enabled on this preview deployment. ` +
+          `This is a Vercel platform feature (not your app code). ` +
+          `Solutions: 1) Disable Deployment Protection in Vercel Dashboard → Project Settings → Deployment Protection, ` +
+          `or 2) Set NEXT_PUBLIC_APP_URL to your production domain. ` +
           `Attempted URL: ${url.substring(0, 200)}`
         );
       }
@@ -76,7 +79,33 @@ async function generateSinglePDF(
     });
     
     // ✅ Get HTML via internal fetch (avoids auth issues)
-    const html = await getInvoiceHTML(invoice, baseUrl);
+    let html = await getInvoiceHTML(invoice, baseUrl);
+    
+    // ✅ Convert relative image paths to absolute URLs so Puppeteer can load them
+    // Next.js serves files from public/ folder at root URL
+    // Example: public/logo-Photoroom.png → /logo-Photoroom.png → https://your-domain.com/logo-Photoroom.png
+    const imageUrlPattern = /src="(\/[^"]+)"/g;
+    const convertedImages: string[] = [];
+    
+    html = html.replace(imageUrlPattern, (match, path) => {
+      const absoluteUrl = `${baseUrl}${path}`;
+      convertedImages.push(`${path} → ${absoluteUrl}`);
+      return `src="${absoluteUrl}"`;
+    });
+    
+    // Also handle srcset and other attributes
+    html = html.replace(
+      /srcset="(\/[^"]+)"/g,
+      (match, path) => {
+        const absoluteUrl = `${baseUrl}${path}`;
+        return `srcset="${absoluteUrl}"`;
+      }
+    );
+    
+    if (convertedImages.length > 0) {
+      console.log('🖼️ Converted image paths to absolute URLs:');
+      convertedImages.forEach(img => console.log(`   ${img}`));
+    }
     
     // Set HTML directly - much faster and avoids auth issues
     console.log('📄 Setting invoice HTML directly in page...');
