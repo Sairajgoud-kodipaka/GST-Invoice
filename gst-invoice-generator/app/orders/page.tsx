@@ -9,7 +9,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
@@ -539,7 +538,6 @@ function OrdersContent() {
   const searchParams = useSearchParams();
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFrom, setDateFrom] = useState<string>('');
@@ -1123,28 +1121,12 @@ function OrdersContent() {
               Import, view, and manage orders. Generate invoices from orders.
           </p>
         </div>
-        <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Import Orders
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Import Orders from CSV</DialogTitle>
-                <DialogDescription>
-                  Upload a CSV file with your order data. Map the fields and preview before importing.
-                </DialogDescription>
-            </DialogHeader>
-            <div className="mt-4">
-              <CSVProcessor
-                onInvoicesReady={handleInvoicesReady}
-                onError={handleError}
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
+        <div>
+          <CSVProcessor
+            onInvoicesReady={handleInvoicesReady}
+            onError={handleError}
+          />
+        </div>
       </div>
 
         {/* Bulk Actions Bar */}
