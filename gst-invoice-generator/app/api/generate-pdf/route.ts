@@ -21,6 +21,42 @@ async function safeClosePage(page: any) {
   }
 }
 
+// ✅ Helper to get invoice HTML by fetching from internal URL (avoids auth issues)
+async function getInvoiceHTML(invoice: InvoiceData, baseUrl: string): Promise<string> {
+  const dataParam = encodeURIComponent(JSON.stringify(invoice));
+  const url = `${baseUrl}/invoice-render-ssr?data=${dataParam}`;
+  
+  console.log('🌐 Fetching invoice HTML from:', url.substring(0, 100) + '...');
+  
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; PDF-Generator/1.0)',
+      },
+    });
+    
+    if (!response.ok) {
+      // Check if we got redirected to a login page
+      const responseText = await response.text();
+      if (responseText.includes('vercel.com/login') || responseText.includes('login') || response.url?.includes('login')) {
+        throw new Error(
+          `Access denied: The preview deployment URL requires authentication. ` +
+          `Please set NEXT_PUBLIC_APP_URL environment variable to your production domain. ` +
+          `Attempted URL: ${url.substring(0, 200)}`
+        );
+      }
+      throw new Error(`Failed to fetch invoice HTML: ${response.status} ${response.statusText}`);
+    }
+    
+    const html = await response.text();
+    console.log('✅ Invoice HTML fetched successfully (length:', html.length, 'chars)');
+    return html;
+  } catch (error: any) {
+    console.error('❌ Failed to fetch invoice HTML:', error.message);
+    throw error;
+  }
+}
+
 // ✅ SIMPLE helper function to generate PDF for a single invoice (NO frame manipulation)
 async function generateSinglePDF(
   browser: any,
@@ -39,49 +75,20 @@ async function generateSinglePDF(
       deviceScaleFactor: 2,
     });
     
-    // ✅ Encode data in URL (NOT base64 - just JSON string)
-    const dataParam = encodeURIComponent(JSON.stringify(invoice));
-    const url = `${baseUrl}/invoice-render-ssr?data=${dataParam}`;
+    // ✅ Get HTML via internal fetch (avoids auth issues)
+    const html = await getInvoiceHTML(invoice, baseUrl);
     
-    console.log('🌐 Navigating to:', url.substring(0, 100) + '...');
-    
-    // ✅ Navigate with flexible wait strategy
-    // networkidle0 can be too strict on Vercel (analytics, etc.), so we use 'load' and then wait for selector
-    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
-    const navigationWaitUntil = isVercel ? 'load' : 'networkidle0';
-    
-    await page.goto(url, {
-      waitUntil: navigationWaitUntil,
-      timeout: 60000,
+    // Set HTML directly - much faster and avoids auth issues
+    console.log('📄 Setting invoice HTML directly in page...');
+    await page.setContent(html, {
+      waitUntil: 'networkidle0',
+      timeout: 30000,
     });
+    console.log('✅ Invoice HTML set successfully');
     
-    console.log('✅ Page loaded (waitUntil:', navigationWaitUntil, ')');
-    
-    // ✅ Verify we're on the correct page
-    const currentUrl = page.url();
-    console.log('📍 Current URL:', currentUrl.substring(0, 150));
-    if (!currentUrl.includes('/invoice-render-ssr')) {
-      throw new Error(`Unexpected URL: ${currentUrl}. Expected /invoice-render-ssr`);
-    }
-    
-    // ✅ Wait for page to be fully ready
-    await page.evaluate(() => {
-      return new Promise<void>((resolve) => {
-        if (document.readyState === 'complete') {
-          resolve();
-        } else {
-          window.addEventListener('load', () => resolve());
-        }
-      });
-    });
-    
-    // ✅ Wait a bit for JavaScript bundles to load (client components need JS)
-    console.log('⏳ Waiting for JavaScript bundles to load...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // ✅ Wait for React/Next.js to hydrate (client components need JS to execute)
-    // Client components like InvoiceTemplate need time to hydrate
-    console.log('⏳ Waiting for React to hydrate client components...');
+    // ✅ Wait a bit for page to stabilize
+    console.log('⏳ Waiting for page to stabilize...');
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Wait for React hydration by checking for Next.js hydration markers
     // and waiting for the invoice element to appear
@@ -285,19 +292,33 @@ export async function POST(request: NextRequest) {
     console.log('🚀 Browser launched');
 
     // Get base URL - handle both local and Vercel environments
+    // Priority: Use request origin (production URL) > NEXT_PUBLIC_APP_URL > VERCEL_URL (preview, may require auth)
     let appUrl: string;
     
     if (isVercel) {
-      // On Vercel, use the deployment URL
-      const vercelUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_APP_URL;
-      if (vercelUrl) {
-        // VERCEL_URL might not include protocol, add it if needed
-        appUrl = vercelUrl.startsWith('http') ? vercelUrl : `https://${vercelUrl}`;
-      } else {
-        // Fallback: construct from headers
-        const protocol = request.headers.get('x-forwarded-proto') || 'https';
-        const host = request.headers.get('host') || 'localhost:3000';
+      // First, try to use the request origin (this is the production URL if available)
+      const protocol = request.headers.get('x-forwarded-proto') || 'https';
+      const host = request.headers.get('host');
+      
+      if (host && !host.includes('localhost')) {
+        // Use the request host (production URL)
         appUrl = host.startsWith('http') ? host : `${protocol}://${host}`;
+        console.log('🌍 Using request origin (production URL):', appUrl);
+      } else if (process.env.NEXT_PUBLIC_APP_URL) {
+        // Use explicitly configured production URL
+        appUrl = process.env.NEXT_PUBLIC_APP_URL;
+        console.log('🌍 Using NEXT_PUBLIC_APP_URL:', appUrl);
+      } else {
+        // Fallback to VERCEL_URL (preview URL - may require authentication)
+        const vercelUrl = process.env.VERCEL_URL;
+        if (vercelUrl) {
+          appUrl = vercelUrl.startsWith('http') ? vercelUrl : `https://${vercelUrl}`;
+          console.log('⚠️ Using VERCEL_URL (preview - may require auth):', appUrl);
+        } else {
+          // Last resort: construct from headers
+          appUrl = `${protocol}://${host || 'localhost:3000'}`;
+          console.log('🌍 Using constructed URL from headers:', appUrl);
+        }
       }
     } else {
       // Local development
@@ -305,9 +326,10 @@ export async function POST(request: NextRequest) {
       const host = request.headers.get('host') || 'localhost:3000';
       const baseUrl = host.startsWith('http') ? host : `${protocol}://${host}`;
       appUrl = process.env.NEXT_PUBLIC_APP_URL || baseUrl;
+      console.log('🌍 Using local URL:', appUrl);
     }
     
-    console.log('🌍 Using base URL:', appUrl);
+    console.log('🌍 Final base URL:', appUrl);
 
     // Handle batch merged PDF (multiple invoices in one PDF)
     if (batch && invoices.length > 1) {
