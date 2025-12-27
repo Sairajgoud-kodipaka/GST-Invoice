@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if an invoice already exists for this order number
+    // Check if an invoice already exists for this order number (prevent regeneration)
     const { data: existingOrderInvoice, error: orderCheckError } = await supabase
       .from('invoices')
       .select('id, invoice_no, order_no, created_at, created_by')
@@ -86,10 +86,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingOrderInvoice) {
-      // Invoice already exists for this order number
+      // Invoice already exists for this order number - prevent regeneration
       return NextResponse.json(
         {
-          error: 'Invoice already exists for this order number',
+          error: `Order ${orderNo} already has invoice ${existingOrderInvoice.invoice_no}. Cannot regenerate invoices.`,
           exists: true,
           orderExists: true,
           existingInvoice: {

@@ -270,7 +270,39 @@ const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
 };
 
 export const invoiceSettingsStorage = {
-  get: (): InvoiceSettings => {
+  // Get settings from Supabase (async) with localStorage fallback
+  get: async (): Promise<InvoiceSettings> => {
+    if (typeof window === 'undefined') return DEFAULT_INVOICE_SETTINGS;
+    
+    try {
+      // Try to get from Supabase first
+      const response = await fetch('/api/invoice-settings');
+      if (response.ok) {
+        const data = await response.json();
+        // Also cache in localStorage for offline access
+        try {
+          localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(data));
+        } catch (e) {
+          // Ignore localStorage errors
+        }
+        return data;
+      }
+    } catch (error) {
+      console.warn('Error fetching settings from Supabase, using localStorage fallback:', error);
+    }
+    
+    // Fallback to localStorage
+    try {
+      const stored = localStorage.getItem(INVOICE_SETTINGS_KEY);
+      return stored ? JSON.parse(stored) : DEFAULT_INVOICE_SETTINGS;
+    } catch (error) {
+      console.error('Error loading invoice settings:', error);
+      return DEFAULT_INVOICE_SETTINGS;
+    }
+  },
+
+  // Synchronous get (for backward compatibility) - uses localStorage only
+  getSync: (): InvoiceSettings => {
     if (typeof window === 'undefined') return DEFAULT_INVOICE_SETTINGS;
     try {
       const stored = localStorage.getItem(INVOICE_SETTINGS_KEY);
@@ -281,12 +313,41 @@ export const invoiceSettingsStorage = {
     }
   },
 
-  save: (settings: InvoiceSettings): void => {
-    if (typeof window === 'undefined') return;
+  // Save settings to Supabase (async) with localStorage fallback
+  save: async (settings: InvoiceSettings): Promise<boolean> => {
+    if (typeof window === 'undefined') return false;
+    
+    try {
+      // Try to save to Supabase first
+      const response = await fetch('/api/invoice-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Also cache in localStorage for offline access
+        try {
+          localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(data.settings || settings));
+        } catch (e) {
+          // Ignore localStorage errors
+        }
+        return true;
+      } else {
+        console.warn('Failed to save settings to Supabase, using localStorage fallback');
+      }
+    } catch (error) {
+      console.warn('Error saving settings to Supabase, using localStorage fallback:', error);
+    }
+    
+    // Fallback to localStorage
     try {
       localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(settings));
+      return true;
     } catch (error) {
       console.error('Error saving invoice settings:', error);
+      return false;
     }
   },
 
@@ -295,17 +356,17 @@ export const invoiceSettingsStorage = {
     localStorage.removeItem(INVOICE_SETTINGS_KEY);
   },
 
-  // Get next invoice number and optionally increment
-  getNextInvoiceNumber: (increment: boolean = true): string => {
+  // Get next invoice number and optionally increment (async)
+  getNextInvoiceNumber: async (increment: boolean = true): Promise<string> => {
     if (typeof window === 'undefined') return `${DEFAULT_INVOICE_SETTINGS.prefix}${DEFAULT_INVOICE_SETTINGS.startingNumber}`;
     try {
-      const settings = invoiceSettingsStorage.get();
+      const settings = await invoiceSettingsStorage.get();
       const currentNumber = settings.startingNumber;
       const invoiceNo = `${settings.prefix}${currentNumber}`;
       
       if (increment && settings.autoIncrement) {
         // Increment the number for next time
-        invoiceSettingsStorage.save({
+        await invoiceSettingsStorage.save({
           ...settings,
           startingNumber: currentNumber + 1,
         });
@@ -318,17 +379,44 @@ export const invoiceSettingsStorage = {
     }
   },
 
-  // Get invoice number based on order number using the mapping
-  getInvoiceNumberFromOrderNumber: (orderNumber: string): string => {
+  // Synchronous version for backward compatibility
+  getNextInvoiceNumberSync: (increment: boolean = true): string => {
     if (typeof window === 'undefined') return `${DEFAULT_INVOICE_SETTINGS.prefix}${DEFAULT_INVOICE_SETTINGS.startingNumber}`;
     try {
-      const settings = invoiceSettingsStorage.get();
+      const settings = invoiceSettingsStorage.getSync();
+      const currentNumber = settings.startingNumber;
+      const invoiceNo = `${settings.prefix}${currentNumber}`;
+      
+      if (increment && settings.autoIncrement) {
+        // Increment the number for next time (sync save to localStorage only)
+        try {
+          localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify({
+            ...settings,
+            startingNumber: currentNumber + 1,
+          }));
+        } catch (e) {
+          // Ignore localStorage errors
+        }
+      }
+      
+      return invoiceNo;
+    } catch (error) {
+      console.error('Error getting next invoice number:', error);
+      return `${DEFAULT_INVOICE_SETTINGS.prefix}${DEFAULT_INVOICE_SETTINGS.startingNumber}`;
+    }
+  },
+
+  // Get invoice number based on order number using the mapping (async)
+  getInvoiceNumberFromOrderNumber: async (orderNumber: string): Promise<string> => {
+    if (typeof window === 'undefined') return `${DEFAULT_INVOICE_SETTINGS.prefix}${DEFAULT_INVOICE_SETTINGS.startingNumber}`;
+    try {
+      const settings = await invoiceSettingsStorage.get();
       
       // Extract numeric part from order number
       const orderMatch = orderNumber.match(/(\d+)(?!.*\d)/);
       if (!orderMatch) {
         // If no number found in order, fall back to regular method
-        return invoiceSettingsStorage.getNextInvoiceNumber();
+        return await invoiceSettingsStorage.getNextInvoiceNumber();
       }
       
       const orderNum = parseInt(orderMatch[1], 10);
@@ -341,10 +429,40 @@ export const invoiceSettingsStorage = {
       }
       
       // Fall back to regular method
-      return invoiceSettingsStorage.getNextInvoiceNumber();
+      return await invoiceSettingsStorage.getNextInvoiceNumber();
     } catch (error) {
       console.error('Error getting invoice number from order number:', error);
-      return invoiceSettingsStorage.getNextInvoiceNumber();
+      return await invoiceSettingsStorage.getNextInvoiceNumber();
+    }
+  },
+
+  // Synchronous version for backward compatibility
+  getInvoiceNumberFromOrderNumberSync: (orderNumber: string): string => {
+    if (typeof window === 'undefined') return `${DEFAULT_INVOICE_SETTINGS.prefix}${DEFAULT_INVOICE_SETTINGS.startingNumber}`;
+    try {
+      const settings = invoiceSettingsStorage.getSync();
+      
+      // Extract numeric part from order number
+      const orderMatch = orderNumber.match(/(\d+)(?!.*\d)/);
+      if (!orderMatch) {
+        // If no number found in order, fall back to regular method
+        return invoiceSettingsStorage.getNextInvoiceNumberSync();
+      }
+      
+      const orderNum = parseInt(orderMatch[1], 10);
+      
+      // If mapping is configured, use it
+      if (settings.startingOrderNumber !== undefined && settings.startingInvoiceNumber !== undefined) {
+        const orderDiff = orderNum - settings.startingOrderNumber;
+        const invoiceNum = settings.startingInvoiceNumber + orderDiff;
+        return `${settings.prefix}${invoiceNum}`;
+      }
+      
+      // Fall back to regular method
+      return invoiceSettingsStorage.getNextInvoiceNumberSync();
+    } catch (error) {
+      console.error('Error getting invoice number from order number:', error);
+      return invoiceSettingsStorage.getNextInvoiceNumberSync();
     }
   },
 };

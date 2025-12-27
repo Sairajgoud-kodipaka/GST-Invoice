@@ -68,59 +68,90 @@ export default function SettingsPage() {
 
   useEffect(() => {
     // Load saved settings
-    const savedBusiness = businessSettingsStorage.get();
-    const savedInvoice = invoiceSettingsStorage.get();
-
-    if (savedBusiness) {
-      // Ensure all fields are properly set, handling undefined/null values
-      setBusinessSettings({
-        name: savedBusiness.name || '',
-        legalName: savedBusiness.legalName || '',
-        address: savedBusiness.address || '',
-        city: savedBusiness.city || '',
-        state: savedBusiness.state || '',
-        pincode: savedBusiness.pincode || '',
-        email: savedBusiness.email || '',
-        phone: savedBusiness.phone || '',
-        gstin: savedBusiness.gstin || '',
-        cin: savedBusiness.cin || '',
-        pan: savedBusiness.pan || '',
-        logoUrl: savedBusiness.logoUrl || '',
-      });
-      if (savedBusiness.logoUrl) {
-        setLogoPreview(savedBusiness.logoUrl);
-      }
-    }
-
-    if (savedInvoice) {
-      // Ensure all invoice settings are properly set
-      setInvoiceSettings({
-        prefix: savedInvoice.prefix || 'O-/',
-        startingNumber: savedInvoice.startingNumber || 1,
-        autoIncrement: savedInvoice.autoIncrement !== undefined ? savedInvoice.autoIncrement : true,
-        defaultPaymentTerms: savedInvoice.defaultPaymentTerms || 30,
-        defaultPaymentMethod: savedInvoice.defaultPaymentMethod || 'Bank Transfer',
-        startingOrderNumber: savedInvoice.startingOrderNumber,
-        startingInvoiceNumber: savedInvoice.startingInvoiceNumber,
-      });
-      // Initialize latest invoice number field with current format
-      const prefix = savedInvoice.prefix || 'O-/';
-      const startingNumber = savedInvoice.startingNumber || 1;
-      setLatestInvoiceNumber(`${prefix}${startingNumber}`);
-      
-      // Initialize order-invoice mapping fields
-      if (savedInvoice.startingOrderNumber !== undefined && savedInvoice.startingInvoiceNumber !== undefined) {
-        setOrderInvoiceMapping({
-          orderNumber: savedInvoice.startingOrderNumber.toString(),
-          invoiceNumber: `${prefix}${savedInvoice.startingInvoiceNumber}`,
+    const loadSettings = async () => {
+      // Load business settings (localStorage)
+      const savedBusiness = businessSettingsStorage.get();
+      if (savedBusiness) {
+        // Ensure all fields are properly set, handling undefined/null values
+        setBusinessSettings({
+          name: savedBusiness.name || '',
+          legalName: savedBusiness.legalName || '',
+          address: savedBusiness.address || '',
+          city: savedBusiness.city || '',
+          state: savedBusiness.state || '',
+          pincode: savedBusiness.pincode || '',
+          email: savedBusiness.email || '',
+          phone: savedBusiness.phone || '',
+          gstin: savedBusiness.gstin || '',
+          cin: savedBusiness.cin || '',
+          pan: savedBusiness.pan || '',
+          logoUrl: savedBusiness.logoUrl || '',
         });
+        if (savedBusiness.logoUrl) {
+          setLogoPreview(savedBusiness.logoUrl);
+        }
       }
-    } else {
-      // If no saved invoice settings, initialize with defaults
-      const defaultPrefix = 'O-/';
-      const defaultStartingNumber = 1;
-      setLatestInvoiceNumber(`${defaultPrefix}${defaultStartingNumber}`);
-    }
+
+      // Load invoice settings from Supabase (with localStorage fallback)
+      try {
+        const savedInvoice = await invoiceSettingsStorage.get();
+        if (savedInvoice) {
+          // Ensure all invoice settings are properly set
+          setInvoiceSettings({
+            prefix: savedInvoice.prefix || 'O-/',
+            startingNumber: savedInvoice.startingNumber || 1,
+            autoIncrement: savedInvoice.autoIncrement !== undefined ? savedInvoice.autoIncrement : true,
+            defaultPaymentTerms: savedInvoice.defaultPaymentTerms || 30,
+            defaultPaymentMethod: savedInvoice.defaultPaymentMethod || 'Bank Transfer',
+            startingOrderNumber: savedInvoice.startingOrderNumber,
+            startingInvoiceNumber: savedInvoice.startingInvoiceNumber,
+          });
+          // Initialize latest invoice number field with current format
+          const prefix = savedInvoice.prefix || 'O-/';
+          const startingNumber = savedInvoice.startingNumber || 1;
+          setLatestInvoiceNumber(`${prefix}${startingNumber}`);
+          
+          // Initialize order-invoice mapping fields
+          if (savedInvoice.startingOrderNumber !== undefined && savedInvoice.startingInvoiceNumber !== undefined) {
+            setOrderInvoiceMapping({
+              orderNumber: savedInvoice.startingOrderNumber.toString(),
+              invoiceNumber: `${prefix}${savedInvoice.startingInvoiceNumber}`,
+            });
+          }
+        } else {
+          // If no saved invoice settings, initialize with defaults
+          const defaultPrefix = 'O-/';
+          const defaultStartingNumber = 1;
+          setLatestInvoiceNumber(`${defaultPrefix}${defaultStartingNumber}`);
+        }
+      } catch (error) {
+        console.error('Error loading invoice settings:', error);
+        // Fallback to localStorage sync version
+        const savedInvoice = invoiceSettingsStorage.getSync();
+        if (savedInvoice) {
+          setInvoiceSettings({
+            prefix: savedInvoice.prefix || 'O-/',
+            startingNumber: savedInvoice.startingNumber || 1,
+            autoIncrement: savedInvoice.autoIncrement !== undefined ? savedInvoice.autoIncrement : true,
+            defaultPaymentTerms: savedInvoice.defaultPaymentTerms || 30,
+            defaultPaymentMethod: savedInvoice.defaultPaymentMethod || 'Bank Transfer',
+            startingOrderNumber: savedInvoice.startingOrderNumber,
+            startingInvoiceNumber: savedInvoice.startingInvoiceNumber,
+          });
+          const prefix = savedInvoice.prefix || 'O-/';
+          const startingNumber = savedInvoice.startingNumber || 1;
+          setLatestInvoiceNumber(`${prefix}${startingNumber}`);
+          if (savedInvoice.startingOrderNumber !== undefined && savedInvoice.startingInvoiceNumber !== undefined) {
+            setOrderInvoiceMapping({
+              orderNumber: savedInvoice.startingOrderNumber.toString(),
+              invoiceNumber: `${prefix}${savedInvoice.startingInvoiceNumber}`,
+            });
+          }
+        }
+      }
+    };
+
+    loadSettings();
   }, []);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -267,7 +298,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveInvoice = () => {
+  const handleSaveInvoice = async () => {
     if (invoiceSettings.prefix.trim() === '') {
       toast({
         title: 'Validation Error',
@@ -301,11 +332,28 @@ export default function SettingsPage() {
       }
     }
 
-    invoiceSettingsStorage.save(invoiceSettings);
-    toast({
-      title: 'Success',
-      description: 'Invoice settings saved successfully',
-    });
+    try {
+      const success = await invoiceSettingsStorage.save(invoiceSettings);
+      if (success) {
+        toast({
+          title: 'Success',
+          description: 'Invoice settings saved successfully to Supabase',
+        });
+      } else {
+        toast({
+          title: 'Warning',
+          description: 'Settings saved to local storage only (Supabase unavailable)',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error saving invoice settings:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save invoice settings',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleExportOrders = () => {

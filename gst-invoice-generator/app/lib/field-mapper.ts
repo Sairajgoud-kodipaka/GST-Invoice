@@ -384,10 +384,11 @@ export function mapCSVToInvoice(
   let finalInvoiceNo = invoiceNo;
   if (!finalInvoiceNo) {
     // Try to get invoice number from order number mapping first
+    // Using sync version for compatibility (will use localStorage cache or Supabase via API)
     if (orderNo) {
-      finalInvoiceNo = invoiceSettingsStorage.getInvoiceNumberFromOrderNumber(orderNo);
+      finalInvoiceNo = invoiceSettingsStorage.getInvoiceNumberFromOrderNumberSync(orderNo);
     } else {
-      finalInvoiceNo = invoiceSettingsStorage.getNextInvoiceNumber();
+      finalInvoiceNo = invoiceSettingsStorage.getNextInvoiceNumberSync();
     }
   }
   
