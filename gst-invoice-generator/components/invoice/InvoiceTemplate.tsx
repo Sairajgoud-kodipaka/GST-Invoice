@@ -1037,25 +1037,24 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             right: '8mm',
             width: 'calc(100% - 16mm)',
             padding: '2px 0',
-            fontSize: '8px',
-            color: '#666',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '2px',
+            fontSize: '9px',
+            color: '#000',
+            fontWeight: 'bold',
+            whiteSpace: 'pre',
+            lineHeight: '1.2',
           }}
         >
-          <div style={{ fontWeight: 'bold', color: '#000', fontSize: '9px' }}>
-            * Subject to Hyderabad Jurisdiction Only Generated from: {website}
-          </div>
+          * Subject to Hyderabad Jurisdiction     Only Generated from: {website}
           {!hidePageNumbers && (
-            <div style={{ fontSize: '9px', textAlign: 'right' }}>
+            <>
+              {'     '}
               Page{' '}
               <span className="page-number-screen">{isClient ? currentPage : 1}</span>
               <span className="page-number-print" />
               {' of '}
               <span className="total-pages-screen">{isClient ? totalPages : 1}</span>
               <span className="total-pages-print" />
-            </div>
+            </>
           )}
         </div>
       </div>

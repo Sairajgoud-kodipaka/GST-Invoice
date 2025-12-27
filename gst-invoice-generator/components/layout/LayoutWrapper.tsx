@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Toaster } from '@/components/ui/toaster';
+import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 
 export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -14,6 +15,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
       <>
         {children}
         <Toaster />
+        <InstallPrompt />
       </>
     );
   }
@@ -26,6 +28,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <Toaster />
+      <InstallPrompt />
     </div>
   );
 }

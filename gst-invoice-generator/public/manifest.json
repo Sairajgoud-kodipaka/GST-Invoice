@@ -1,0 +1,49 @@
+{
+  "name": "GST Invoice Generator",
+  "short_name": "Invoice Gen",
+  "description": "Generate GST-compliant invoices from CSV files",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-Photoroom.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-Photoroom.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["business", "productivity", "finance"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Create Invoice",
+      "short_name": "New Invoice",
+      "description": "Create a new invoice",
+      "url": "/",
+      "icons": [{ "src": "/app-icon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "View Invoices",
+      "short_name": "Invoices",
+      "description": "View all invoices",
+      "url": "/invoices",
+      "icons": [{ "src": "/app-icon.svg", "sizes": "96x96" }]
+    }
+  ]
+}
+
