@@ -88,7 +88,7 @@ async function generateSinglePDF(
           timeout: timeout,
         });
         // Verify it has content (basic sanity check)
-        const hasContent = await page.evaluate((sel) => {
+        const hasContent = await page.evaluate((sel: string) => {
           const el = document.querySelector(sel);
           return el !== null && el.textContent && el.textContent.trim().length > 10;
         }, selector);
