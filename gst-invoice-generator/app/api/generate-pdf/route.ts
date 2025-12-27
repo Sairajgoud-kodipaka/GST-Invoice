@@ -57,7 +57,14 @@ async function generateSinglePDF(
     
     console.log('✅ Page loaded (waitUntil:', navigationWaitUntil, ')');
     
-    // ✅ Wait for page to be fully ready and check for errors
+    // ✅ Verify we're on the correct page
+    const currentUrl = page.url();
+    console.log('📍 Current URL:', currentUrl.substring(0, 150));
+    if (!currentUrl.includes('/invoice-render-ssr')) {
+      throw new Error(`Unexpected URL: ${currentUrl}. Expected /invoice-render-ssr`);
+    }
+    
+    // ✅ Wait for page to be fully ready
     await page.evaluate(() => {
       return new Promise<void>((resolve) => {
         if (document.readyState === 'complete') {
@@ -68,65 +75,114 @@ async function generateSinglePDF(
       });
     });
     
+    // ✅ Wait a bit for JavaScript bundles to load (client components need JS)
+    console.log('⏳ Waiting for JavaScript bundles to load...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
     // ✅ Wait for React/Next.js to hydrate (client components need JS to execute)
-    // Give a short delay for JavaScript to execute and hydrate client components
-    console.log('⏳ Waiting for JavaScript to execute and hydrate components...');
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Client components like InvoiceTemplate need time to hydrate
+    console.log('⏳ Waiting for React to hydrate client components...');
     
-    // ✅ Wait for invoice element (try both selectors, check existence first, then visibility)
-    // Use shorter timeout since page loads quickly
-    const selectorTimeout = 5000; // 5 seconds should be enough if page loaded
+    // Wait for React hydration by checking for Next.js hydration markers
+    // and waiting for the invoice element to appear
+    let attempts = 0;
+    const maxAttempts = 20; // 20 attempts * 500ms = 10 seconds max
+    let elementFound = false;
     
-    let invoiceElementFound = false;
-    let selectorUsed = '';
-    
-    // Strategy: Wait for element to exist in DOM (for PDF, we don't need it visible in viewport)
-    const checkSelector = async (selector: string, timeout: number): Promise<boolean> => {
-      try {
-        // Wait for element to exist in DOM (no visibility requirement - PDF doesn't need viewport visibility)
-        await page.waitForSelector(selector, {
-          timeout: timeout,
-        });
-        // Verify it has content (basic sanity check)
-        const hasContent = await page.evaluate((sel: string) => {
-          const el = document.querySelector(sel);
-          return el !== null && el.textContent && el.textContent.trim().length > 10;
-        }, selector);
-        return hasContent;
-      } catch {
-        return false;
-      }
-    };
-    
-    // Try .invoice-page first (preferred selector)
-    console.log(`⏳ Checking for .invoice-page...`);
-    invoiceElementFound = await checkSelector('.invoice-page', selectorTimeout);
-    
-    if (invoiceElementFound) {
-      selectorUsed = '.invoice-page';
-      console.log('✅ Invoice element (.invoice-page) found and visible');
-    } else {
-      // Fallback: try .invoice-template
-      console.log('⚠️ .invoice-page not found, trying .invoice-template...');
-      invoiceElementFound = await checkSelector('.invoice-template', selectorTimeout);
+    while (attempts < maxAttempts && !elementFound) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      attempts++;
       
-      if (invoiceElementFound) {
-        selectorUsed = '.invoice-template';
-        console.log('✅ Invoice element (.invoice-template) found and visible');
-      } else {
-        // Debug: log page content to understand what's happening
-        console.error('❌ Both selectors failed. Checking page content...');
-        const pageInfo = await page.evaluate(() => {
-          return {
-            bodyHTML: document.body.innerHTML.substring(0, 1000),
-            hasInvoicePage: !!document.querySelector('.invoice-page'),
-            hasInvoiceTemplate: !!document.querySelector('.invoice-template'),
-            readyState: document.readyState,
-          };
-        });
-        console.log('📄 Page info:', JSON.stringify(pageInfo, null, 2));
-        throw new Error(`Invoice element not found. Tried .invoice-page and .invoice-template. Page may not have rendered correctly.`);
+      // Check if invoice element exists
+      const hasElement = await page.evaluate(() => {
+        return !!(
+          document.querySelector('.invoice-page') || 
+          document.querySelector('.invoice-template')
+        );
+      });
+      
+      if (hasElement) {
+        elementFound = true;
+        console.log(`✅ Invoice element found after ${attempts * 500}ms`);
+        break;
       }
+      
+      // Check for errors on the page
+      if (attempts % 4 === 0) { // Every 2 seconds
+        const hasError = await page.evaluate(() => {
+          const errorElements = document.querySelectorAll('[class*="error"], [class*="Error"]');
+          const bodyText = document.body.textContent || '';
+          return errorElements.length > 0 || bodyText.includes('Invalid invoice') || bodyText.includes('No invoice data');
+        });
+        
+        if (hasError) {
+          const errorText = await page.evaluate(() => document.body.textContent?.substring(0, 200));
+          console.error('⚠️ Error detected on page:', errorText);
+          throw new Error(`Page shows error: ${errorText}`);
+        }
+      }
+    }
+    
+    if (!elementFound) {
+      console.log('⚠️ Invoice element not found after waiting, checking page state...');
+    }
+    
+    // ✅ Check for invoice element (if not already found during hydration wait)
+    if (!elementFound) {
+      console.log('⏳ Invoice element not found during hydration, checking selectors...');
+      
+      const selectorTimeout = 5000; // 5 seconds
+      
+      // Strategy: Wait for element to exist in DOM (for PDF, we don't need it visible in viewport)
+      const checkSelector = async (selector: string, timeout: number): Promise<boolean> => {
+        try {
+          // Wait for element to exist in DOM (no visibility requirement - PDF doesn't need viewport visibility)
+          await page.waitForSelector(selector, {
+            timeout: timeout,
+          });
+          // Verify it has content (basic sanity check)
+          const hasContent = await page.evaluate((sel: string) => {
+            const el = document.querySelector(sel);
+            return el !== null && el.textContent && el.textContent.trim().length > 10;
+          }, selector);
+          return hasContent;
+        } catch {
+          return false;
+        }
+      };
+      
+      // Try .invoice-page first (preferred selector)
+      console.log(`⏳ Checking for .invoice-page...`);
+      elementFound = await checkSelector('.invoice-page', selectorTimeout);
+      
+      if (elementFound) {
+        console.log('✅ Invoice element (.invoice-page) found');
+      } else {
+        // Fallback: try .invoice-template
+        console.log('⚠️ .invoice-page not found, trying .invoice-template...');
+        elementFound = await checkSelector('.invoice-template', selectorTimeout);
+        
+        if (elementFound) {
+          console.log('✅ Invoice element (.invoice-template) found');
+        }
+      }
+    }
+    
+    // Final check - if still not found, log debug info and throw error
+    if (!elementFound) {
+      console.error('❌ Invoice element not found after all attempts. Checking page content...');
+      const pageInfo = await page.evaluate(() => {
+        return {
+          bodyHTML: document.body.innerHTML.substring(0, 1000),
+          bodyText: document.body.textContent?.substring(0, 500),
+          hasInvoicePage: !!document.querySelector('.invoice-page'),
+          hasInvoiceTemplate: !!document.querySelector('.invoice-template'),
+          readyState: document.readyState,
+          allClasses: Array.from(document.querySelectorAll('[class]')).map(el => el.className).slice(0, 10),
+        };
+      });
+      console.log('📄 Page info:', JSON.stringify(pageInfo, null, 2));
+      throw new Error(`Invoice element not found. Tried .invoice-page and .invoice-template. Page may not have rendered correctly.`);
     }
     
     // ✅ Small additional wait to ensure rendering is complete
