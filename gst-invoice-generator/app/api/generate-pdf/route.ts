@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import chromium from '@sparticuz/chromium';
 import JSZip from 'jszip';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
 import { InvoiceData } from '@/app/types/invoice';
 
 // Import puppeteer packages - use puppeteer for local (includes Chromium), puppeteer-core for Vercel
@@ -366,12 +366,56 @@ export async function POST(request: NextRequest) {
       const pdfDoc = await PDFDocument.create();
       const sanitizeFilename = (filename: string) => filename.replace(/[<>:"/\\|?*]/g, '_');
 
+      // First pass: Generate all PDFs and merge them
       for (const invoice of invoices as InvoiceData[]) {
         const pdfBytes = await generateSinglePDF(browser, invoice, appUrl);
         const invoicePdf = await PDFDocument.load(pdfBytes);
         const pages = await pdfDoc.copyPages(invoicePdf, invoicePdf.getPageIndices());
         pages.forEach((page) => pdfDoc.addPage(page));
       }
+
+      // Get total page count
+      const totalPages = pdfDoc.getPageCount();
+      console.log(`📄 Total pages in merged PDF: ${totalPages}`);
+
+      // Add page numbers to each page using pdf-lib
+      // We need to overlay the existing page numbers with correct ones
+      const helveticaFont = await pdfDoc.embedFont('Helvetica');
+      const pages = pdfDoc.getPages();
+      
+      pages.forEach((page, index) => {
+        const pageNumber = index + 1;
+        const { width, height } = page.getSize();
+        
+        // Calculate footer position (8mm from bottom, right-aligned)
+        // A4: 210mm × 297mm = 595.28 × 841.89 points
+        // 8mm = 22.68 points
+        // Footer is positioned at bottom: 8mm from bottom
+        const footerY = 22.68; // 8mm from bottom
+        const footerText = `Page ${pageNumber} of ${totalPages}`;
+        const textWidth = helveticaFont.widthOfTextAtSize(footerText, 6.35);
+        const footerX = width - 22.68 - textWidth - 5; // Right-aligned with 5pt padding
+        
+        // Draw white rectangle to cover old page number (approximate area)
+        // The page number is in the bottom right, approximately 60 points wide
+        page.drawRectangle({
+          x: footerX - 5,
+          y: footerY - 3,
+          width: textWidth + 20,
+          height: 10,
+          color: rgb(1, 1, 1), // White to cover old text
+          opacity: 1,
+        });
+        
+        // Draw new page number text
+        page.drawText(footerText, {
+          x: footerX,
+          y: footerY,
+          size: 6.35, // 9px ≈ 6.35 points
+          font: helveticaFont,
+          color: rgb(0.4, 0.4, 0.4), // Gray to match existing
+        });
+      });
 
       const mergedPdfBytes = await pdfDoc.save();
       const firstInvoice = invoices[0] as InvoiceData;
