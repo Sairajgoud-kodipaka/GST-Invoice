@@ -57,48 +57,80 @@ async function generateSinglePDF(
     
     console.log('✅ Page loaded (waitUntil:', navigationWaitUntil, ')');
     
-    // ✅ Wait for invoice element to be visible (try both selectors with longer timeouts for Vercel)
-    // Vercel can be slower, so we use longer timeouts
-    const selectorTimeout = isVercel ? 30000 : 15000; // 30s for Vercel, 15s for local
+    // ✅ Wait for page to be fully ready and check for errors
+    await page.evaluate(() => {
+      return new Promise<void>((resolve) => {
+        if (document.readyState === 'complete') {
+          resolve();
+        } else {
+          window.addEventListener('load', () => resolve());
+        }
+      });
+    });
+    
+    // ✅ Wait for React/Next.js to hydrate (client components need JS to execute)
+    // Give a short delay for JavaScript to execute and hydrate client components
+    console.log('⏳ Waiting for JavaScript to execute and hydrate components...');
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // ✅ Wait for invoice element (try both selectors, check existence first, then visibility)
+    // Use shorter timeout since page loads quickly
+    const selectorTimeout = 5000; // 5 seconds should be enough if page loaded
     
     let invoiceElementFound = false;
+    let selectorUsed = '';
+    
+    // Strategy: Wait for element to exist in DOM (for PDF, we don't need it visible in viewport)
+    const checkSelector = async (selector: string, timeout: number): Promise<boolean> => {
+      try {
+        // Wait for element to exist in DOM (no visibility requirement - PDF doesn't need viewport visibility)
+        await page.waitForSelector(selector, {
+          timeout: timeout,
+        });
+        // Verify it has content (basic sanity check)
+        const hasContent = await page.evaluate((sel) => {
+          const el = document.querySelector(sel);
+          return el !== null && el.textContent && el.textContent.trim().length > 10;
+        }, selector);
+        return hasContent;
+      } catch {
+        return false;
+      }
+    };
     
     // Try .invoice-page first (preferred selector)
-    try {
-      console.log(`⏳ Waiting for .invoice-page (timeout: ${selectorTimeout}ms)...`);
-      await page.waitForSelector('.invoice-page', {
-        visible: true,
-        timeout: selectorTimeout,
-      });
-      console.log('✅ Invoice element (.invoice-page) found');
-      invoiceElementFound = true;
-    } catch (error) {
-      console.log('⚠️ .invoice-page not found, trying .invoice-template...');
+    console.log(`⏳ Checking for .invoice-page...`);
+    invoiceElementFound = await checkSelector('.invoice-page', selectorTimeout);
+    
+    if (invoiceElementFound) {
+      selectorUsed = '.invoice-page';
+      console.log('✅ Invoice element (.invoice-page) found and visible');
+    } else {
       // Fallback: try .invoice-template
-      try {
-        await page.waitForSelector('.invoice-template', {
-          visible: true,
-          timeout: selectorTimeout,
-        });
-        console.log('✅ Invoice element (.invoice-template) found');
-        invoiceElementFound = true;
-      } catch (fallbackError) {
-        console.error('❌ Both selectors failed. Checking page content...');
+      console.log('⚠️ .invoice-page not found, trying .invoice-template...');
+      invoiceElementFound = await checkSelector('.invoice-template', selectorTimeout);
+      
+      if (invoiceElementFound) {
+        selectorUsed = '.invoice-template';
+        console.log('✅ Invoice element (.invoice-template) found and visible');
+      } else {
         // Debug: log page content to understand what's happening
-        const bodyContent = await page.evaluate(() => document.body.innerHTML.substring(0, 500));
-        console.log('📄 Page body preview:', bodyContent);
+        console.error('❌ Both selectors failed. Checking page content...');
+        const pageInfo = await page.evaluate(() => {
+          return {
+            bodyHTML: document.body.innerHTML.substring(0, 1000),
+            hasInvoicePage: !!document.querySelector('.invoice-page'),
+            hasInvoiceTemplate: !!document.querySelector('.invoice-template'),
+            readyState: document.readyState,
+          };
+        });
+        console.log('📄 Page info:', JSON.stringify(pageInfo, null, 2));
         throw new Error(`Invoice element not found. Tried .invoice-page and .invoice-template. Page may not have rendered correctly.`);
       }
     }
     
-    if (!invoiceElementFound) {
-      throw new Error('Invoice element not found after waiting');
-    }
-    
-    // ✅ Additional wait to ensure rendering is complete (longer for Vercel)
-    const renderDelay = isVercel ? 2000 : 1000;
-    console.log(`⏳ Waiting ${renderDelay}ms for rendering to complete...`);
-    await new Promise(resolve => setTimeout(resolve, renderDelay));
+    // ✅ Small additional wait to ensure rendering is complete
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     console.log('📄 Generating PDF...');
     
