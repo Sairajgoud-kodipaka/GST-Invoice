@@ -174,9 +174,20 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
                 currentInvoiceNo = invoiceService.incrementInvoiceNumber(invoiceNoToUse);
                 break;
               } else if (createResult.exists) {
-                // Race condition - someone else created it, try next number
-                invoiceNoToUse = invoiceService.incrementInvoiceNumber(invoiceNoToUse);
-                attempts++;
+                // Check if it's an order number duplicate (not just invoice number)
+                if (createResult.existingInvoice && createResult.existingInvoice.orderNo === invoice.metadata.orderNo) {
+                  // Order already has an invoice, skip this order
+                  skippedInvoices.push({
+                    invoiceNo: invoiceNoToUse,
+                    reason: `Order ${invoice.metadata.orderNo} already has invoice ${createResult.existingInvoice.invoiceNo}`,
+                    orderNo: invoice.metadata.orderNo,
+                  });
+                  break;
+                } else {
+                  // Race condition - invoice number was taken, try next number
+                  invoiceNoToUse = invoiceService.incrementInvoiceNumber(invoiceNoToUse);
+                  attempts++;
+                }
               } else {
                 // Other error
                 skippedInvoices.push({

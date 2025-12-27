@@ -56,6 +56,7 @@ export default function SettingsPage() {
     defaultPaymentTerms: 30,
     defaultPaymentMethod: 'Bank Transfer',
   });
+  const [latestInvoiceNumber, setLatestInvoiceNumber] = useState<string>('');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
 
@@ -65,14 +66,44 @@ export default function SettingsPage() {
     const savedInvoice = invoiceSettingsStorage.get();
 
     if (savedBusiness) {
-      setBusinessSettings(savedBusiness);
+      // Ensure all fields are properly set, handling undefined/null values
+      setBusinessSettings({
+        name: savedBusiness.name || '',
+        legalName: savedBusiness.legalName || '',
+        address: savedBusiness.address || '',
+        city: savedBusiness.city || '',
+        state: savedBusiness.state || '',
+        pincode: savedBusiness.pincode || '',
+        email: savedBusiness.email || '',
+        phone: savedBusiness.phone || '',
+        gstin: savedBusiness.gstin || '',
+        cin: savedBusiness.cin || '',
+        pan: savedBusiness.pan || '',
+        logoUrl: savedBusiness.logoUrl || '',
+      });
       if (savedBusiness.logoUrl) {
         setLogoPreview(savedBusiness.logoUrl);
       }
     }
 
     if (savedInvoice) {
-      setInvoiceSettings(savedInvoice);
+      // Ensure all invoice settings are properly set
+      setInvoiceSettings({
+        prefix: savedInvoice.prefix || 'O-/',
+        startingNumber: savedInvoice.startingNumber || 1,
+        autoIncrement: savedInvoice.autoIncrement !== undefined ? savedInvoice.autoIncrement : true,
+        defaultPaymentTerms: savedInvoice.defaultPaymentTerms || 30,
+        defaultPaymentMethod: savedInvoice.defaultPaymentMethod || 'Bank Transfer',
+      });
+      // Initialize latest invoice number field with current format
+      const prefix = savedInvoice.prefix || 'O-/';
+      const startingNumber = savedInvoice.startingNumber || 1;
+      setLatestInvoiceNumber(`${prefix}${startingNumber}`);
+    } else {
+      // If no saved invoice settings, initialize with defaults
+      const defaultPrefix = 'O-/';
+      const defaultStartingNumber = 1;
+      setLatestInvoiceNumber(`${defaultPrefix}${defaultStartingNumber}`);
     }
   }, []);
 
@@ -160,6 +191,35 @@ export default function SettingsPage() {
       title: 'Success',
       description: 'Business settings saved successfully',
     });
+  };
+
+  const handleLatestInvoiceNumberChange = (value: string) => {
+    setLatestInvoiceNumber(value);
+    
+    // Parse the invoice number to extract prefix and number
+    if (value.trim()) {
+      // Match pattern: prefix followed by number at the end
+      const match = value.match(/^(.+?)(\d+)$/);
+      if (match) {
+        const prefix = match[1];
+        const number = parseInt(match[2], 10);
+        
+        if (!isNaN(number) && number > 0) {
+          // Update prefix and set starting number to the same number
+          setInvoiceSettings({
+            ...invoiceSettings,
+            prefix: prefix,
+            startingNumber: number, // Set to the same number from latest invoice
+          });
+        }
+      } else {
+        // If no number found, try to extract just the prefix
+        setInvoiceSettings({
+          ...invoiceSettings,
+          prefix: value,
+        });
+      }
+    }
   };
 
   const handleSaveInvoice = () => {
@@ -452,7 +512,7 @@ export default function SettingsPage() {
               <Label htmlFor="pan">PAN</Label>
               <Input
                 id="pan"
-                value={businessSettings.pan}
+                value={businessSettings.pan ?? ''}
                 onChange={(e) => setBusinessSettings({ ...businessSettings, pan: e.target.value.toUpperCase() })}
                 placeholder="AAPCM2955G"
                 maxLength={10}
@@ -464,7 +524,7 @@ export default function SettingsPage() {
               <Label htmlFor="cin">CIN</Label>
               <Input
                 id="cin"
-                value={businessSettings.cin || ''}
+                value={businessSettings.cin ?? ''}
                 onChange={(e) => setBusinessSettings({ ...businessSettings, cin: e.target.value })}
                 placeholder="U36900TG2021PTC158093"
               />
@@ -503,6 +563,19 @@ export default function SettingsPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="latestInvoiceNumber">Latest Invoice Number</Label>
+              <Input
+                id="latestInvoiceNumber"
+                value={latestInvoiceNumber}
+                onChange={(e) => handleLatestInvoiceNumberChange(e.target.value)}
+                placeholder="O-/3579"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter your latest invoice number (e.g., O-/3579). The system will extract the prefix and set the next number automatically.
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="prefix">Invoice Prefix</Label>
               <Input
@@ -554,11 +627,11 @@ export default function SettingsPage() {
             <div className="space-y-2">
               <Label htmlFor="paymentMethod">Default Payment Method</Label>
               <Select
-                value={invoiceSettings.defaultPaymentMethod}
+                value={invoiceSettings.defaultPaymentMethod || 'Bank Transfer'}
                 onValueChange={(value) => setInvoiceSettings({ ...invoiceSettings, defaultPaymentMethod: value })}
               >
                 <SelectTrigger id="paymentMethod">
-                  <SelectValue />
+                  <SelectValue placeholder="Select payment method" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Cash">Cash</SelectItem>

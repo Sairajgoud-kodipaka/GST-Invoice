@@ -69,6 +69,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if an invoice already exists for this order number
+    const { data: existingOrderInvoice, error: orderCheckError } = await supabase
+      .from('invoices')
+      .select('id, invoice_no, order_no, created_at, created_by')
+      .eq('order_no', orderNo)
+      .single();
+
+    if (orderCheckError && orderCheckError.code !== 'PGRST116') {
+      // Error other than "not found"
+      console.error('Error checking for existing order invoice:', orderCheckError);
+      return NextResponse.json(
+        { error: 'Failed to check for existing order invoice', details: orderCheckError.message },
+        { status: 500 }
+      );
+    }
+
+    if (existingOrderInvoice) {
+      // Invoice already exists for this order number
+      return NextResponse.json(
+        {
+          error: 'Invoice already exists for this order number',
+          exists: true,
+          orderExists: true,
+          existingInvoice: {
+            invoiceNo: existingOrderInvoice.invoice_no,
+            orderNo: existingOrderInvoice.order_no,
+            createdAt: existingOrderInvoice.created_at,
+            createdBy: existingOrderInvoice.created_by || 'Unknown',
+          },
+        },
+        { status: 409 } // Conflict status code
+      );
+    }
+
     // Create the invoice
     const { data: newInvoice, error: insertError } = await supabase
       .from('invoices')
