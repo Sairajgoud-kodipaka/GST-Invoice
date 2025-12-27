@@ -554,6 +554,7 @@ function OrdersContent() {
   const [isBulkExporting, setIsBulkExporting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     const loadOrders = () => {
@@ -677,29 +678,6 @@ function OrdersContent() {
     currentPage * itemsPerPage
   );
 
-  const handleInvoicesReady = useCallback(
-    (generatedInvoices: InvoiceData[]) => {
-      const newOrders = generatedInvoices.map(invoiceDataToOrder);
-      ordersStorage.addMany(newOrders);
-      setOrders(ordersStorage.getAll());
-      toast({
-        title: 'Success',
-        description: `${newOrders.length} order(s) imported successfully`,
-      });
-    },
-    [toast]
-  );
-
-  const handleError = useCallback(
-    (errorMessage: string) => {
-      toast({
-        title: 'Import Error',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    },
-    [toast]
-  );
 
   const toggleOrderSelection = (id: string) => {
     setSelectedOrders((prev) => {
@@ -797,6 +775,31 @@ function OrdersContent() {
       setIsGeneratingInvoice(null);
     }
   };
+
+  const handleInvoicesReady = useCallback(
+    (generatedInvoices: InvoiceData[]) => {
+      const newOrders = generatedInvoices.map(invoiceDataToOrder);
+      ordersStorage.addMany(newOrders);
+      setOrders(ordersStorage.getAll());
+      setShowUpload(false); // Hide upload section after successful import
+      toast({
+        title: 'Success',
+        description: `${newOrders.length} order(s) imported successfully`,
+      });
+    },
+    [toast]
+  );
+
+  const handleError = useCallback(
+    (errorMessage: string) => {
+      toast({
+        title: 'Import Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    },
+    [toast]
+  );
 
   const handleBulkGenerateInvoices = async () => {
     if (isBulkGenerating) return; // Prevent duplicate clicks
@@ -1121,12 +1124,23 @@ function OrdersContent() {
           </p>
         </div>
         <div>
+          <Button onClick={() => setShowUpload(!showUpload)}>
+            <Upload className="h-4 w-4 mr-2" />
+            {showUpload ? 'Hide Upload' : 'Import Orders'}
+          </Button>
+        </div>
+      </div>
+
+      {/* CSV Upload Section */}
+      {showUpload && (
+        <div className="border rounded-lg p-6 bg-muted/50">
+          <h2 className="text-lg font-semibold mb-4">Import Orders from CSV</h2>
           <CSVProcessor
             onInvoicesReady={handleInvoicesReady}
             onError={handleError}
           />
         </div>
-      </div>
+      )}
 
         {/* Bulk Actions Bar */}
         {selectedOrders.size > 0 && (
