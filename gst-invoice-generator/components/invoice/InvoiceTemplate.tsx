@@ -1046,21 +1046,26 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             color: '#000',
             fontWeight: 'bold',
             lineHeight: '1',
-            whiteSpace: 'pre',
             fontFamily: 'inherit',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
           }}
         >
-          * Subject to Hyderabad Jurisdiction Only {SPACES_100}Generated from: {website}{SPACES_15}
-          {!hidePageNumbers && (
-            <>
-              Page{' '}
-              <span className="page-number-screen" style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? currentPage : 1}</span>
-              <span className="page-number-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
-              {' of '}
-              <span className="total-pages-screen" style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? totalPages : 1}</span>
-              <span className="total-pages-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
-            </>
-          )}
+          <span>* Subject to Hyderabad Jurisdiction Only</span>
+          <span style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
+            <span>Generated from: {website}</span>
+            {!hidePageNumbers && (
+              <span style={{ marginLeft: '8px' }}>
+                Page{' '}
+                <span className="page-number-screen" style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? currentPage : 1}</span>
+                <span className="page-number-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
+                {' of '}
+                <span className="total-pages-screen" style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? totalPages : 1}</span>
+                <span className="total-pages-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
+              </span>
+            )}
+          </span>
         </div>
       </div>
 
