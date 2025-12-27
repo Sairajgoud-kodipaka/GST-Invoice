@@ -55,8 +55,14 @@ export default function SettingsPage() {
     autoIncrement: true,
     defaultPaymentTerms: 30,
     defaultPaymentMethod: 'Bank Transfer',
+    startingOrderNumber: undefined,
+    startingInvoiceNumber: undefined,
   });
   const [latestInvoiceNumber, setLatestInvoiceNumber] = useState<string>('');
+  const [orderInvoiceMapping, setOrderInvoiceMapping] = useState<{ orderNumber: string; invoiceNumber: string }>({
+    orderNumber: '',
+    invoiceNumber: '',
+  });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
 
@@ -94,11 +100,21 @@ export default function SettingsPage() {
         autoIncrement: savedInvoice.autoIncrement !== undefined ? savedInvoice.autoIncrement : true,
         defaultPaymentTerms: savedInvoice.defaultPaymentTerms || 30,
         defaultPaymentMethod: savedInvoice.defaultPaymentMethod || 'Bank Transfer',
+        startingOrderNumber: savedInvoice.startingOrderNumber,
+        startingInvoiceNumber: savedInvoice.startingInvoiceNumber,
       });
       // Initialize latest invoice number field with current format
       const prefix = savedInvoice.prefix || 'O-/';
       const startingNumber = savedInvoice.startingNumber || 1;
       setLatestInvoiceNumber(`${prefix}${startingNumber}`);
+      
+      // Initialize order-invoice mapping fields
+      if (savedInvoice.startingOrderNumber !== undefined && savedInvoice.startingInvoiceNumber !== undefined) {
+        setOrderInvoiceMapping({
+          orderNumber: savedInvoice.startingOrderNumber.toString(),
+          invoiceNumber: `${prefix}${savedInvoice.startingInvoiceNumber}`,
+        });
+      }
     } else {
       // If no saved invoice settings, initialize with defaults
       const defaultPrefix = 'O-/';
@@ -222,6 +238,35 @@ export default function SettingsPage() {
     }
   };
 
+  const handleOrderInvoiceMappingChange = (field: 'orderNumber' | 'invoiceNumber', value: string) => {
+    const updated = { ...orderInvoiceMapping, [field]: value };
+    setOrderInvoiceMapping(updated);
+    
+    // Parse both fields to extract numbers
+    if (updated.orderNumber.trim() && updated.invoiceNumber.trim()) {
+      // Extract order number (numeric part)
+      const orderMatch = updated.orderNumber.match(/(\d+)(?!.*\d)/);
+      const orderNum = orderMatch ? parseInt(orderMatch[1], 10) : null;
+      
+      // Extract invoice number (prefix and numeric part)
+      const invoiceMatch = updated.invoiceNumber.match(/^(.+?)(\d+)$/);
+      if (invoiceMatch && orderNum !== null) {
+        const prefix = invoiceMatch[1];
+        const invoiceNum = parseInt(invoiceMatch[2], 10);
+        
+        if (!isNaN(invoiceNum) && !isNaN(orderNum) && invoiceNum > 0 && orderNum > 0) {
+          // Update settings with the mapping
+          setInvoiceSettings({
+            ...invoiceSettings,
+            prefix: prefix,
+            startingOrderNumber: orderNum,
+            startingInvoiceNumber: invoiceNum,
+          });
+        }
+      }
+    }
+  };
+
   const handleSaveInvoice = () => {
     if (invoiceSettings.prefix.trim() === '') {
       toast({
@@ -239,6 +284,21 @@ export default function SettingsPage() {
         variant: 'destructive',
       });
       return;
+    }
+
+    // Validate order-invoice mapping if provided
+    if (orderInvoiceMapping.orderNumber.trim() && orderInvoiceMapping.invoiceNumber.trim()) {
+      const orderMatch = orderInvoiceMapping.orderNumber.match(/(\d+)(?!.*\d)/);
+      const invoiceMatch = orderInvoiceMapping.invoiceNumber.match(/^(.+?)(\d+)$/);
+      
+      if (!orderMatch || !invoiceMatch) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please enter valid order number and invoice number for the mapping',
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     invoiceSettingsStorage.save(invoiceSettings);
@@ -574,6 +634,50 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground">
                 Enter your latest invoice number (e.g., O-/3579). The system will extract the prefix and set the next number automatically.
               </p>
+            </div>
+
+            <div className="space-y-2 md:col-span-2 border-t pt-4">
+              <Label className="text-base font-semibold">Order Number to Invoice Number Mapping</Label>
+              <p className="text-xs text-muted-foreground mb-4">
+                Set the mapping between order numbers and invoice numbers. For example, if order 6244 corresponds to invoice O-/3579, enter both values below. The system will maintain this relationship for all subsequent orders.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="startingOrderNumber">Starting Order Number</Label>
+                  <Input
+                    id="startingOrderNumber"
+                    value={orderInvoiceMapping.orderNumber}
+                    onChange={(e) => handleOrderInvoiceMappingChange('orderNumber', e.target.value)}
+                    placeholder="6244"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Enter the order number (e.g., 6244)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="startingInvoiceNumberMapping">Corresponding Invoice Number</Label>
+                  <Input
+                    id="startingInvoiceNumberMapping"
+                    value={orderInvoiceMapping.invoiceNumber}
+                    onChange={(e) => handleOrderInvoiceMappingChange('invoiceNumber', e.target.value)}
+                    placeholder="O-/3579"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Enter the invoice number for this order (e.g., O-/3579)
+                  </p>
+                </div>
+              </div>
+              {invoiceSettings.startingOrderNumber !== undefined && invoiceSettings.startingInvoiceNumber !== undefined && (
+                <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <p className="text-sm">
+                    <strong>Mapping Active:</strong> Order {invoiceSettings.startingOrderNumber} → Invoice {invoiceSettings.prefix}{invoiceSettings.startingInvoiceNumber}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Example: Order {invoiceSettings.startingOrderNumber + 1} will use Invoice {invoiceSettings.prefix}{invoiceSettings.startingInvoiceNumber + 1}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

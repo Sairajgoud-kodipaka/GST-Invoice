@@ -380,9 +380,19 @@ export function mapCSVToInvoice(
   const totalAmountAfterTax = getNumericValue(row, totalAmountCol) || 0; // Use from CSV only, no calculation
 
   // Create invoice metadata - invoice number should be provided by caller
-  // Falls back to localStorage if not provided
+  // Falls back to order-based mapping or localStorage if not provided
+  let finalInvoiceNo = invoiceNo;
+  if (!finalInvoiceNo) {
+    // Try to get invoice number from order number mapping first
+    if (orderNo) {
+      finalInvoiceNo = invoiceSettingsStorage.getInvoiceNumberFromOrderNumber(orderNo);
+    } else {
+      finalInvoiceNo = invoiceSettingsStorage.getNextInvoiceNumber();
+    }
+  }
+  
   const metadata: InvoiceMetadata = {
-    invoiceNo: invoiceNo || invoiceSettingsStorage.getNextInvoiceNumber(),
+    invoiceNo: finalInvoiceNo,
     orderNo: orderNo,
     invoiceDate,
     orderDate,

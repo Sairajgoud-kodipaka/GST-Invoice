@@ -228,6 +228,8 @@ export interface InvoiceSettings {
   autoIncrement: boolean;
   defaultPaymentTerms: number; // days
   defaultPaymentMethod: string;
+  startingOrderNumber?: number; // Starting order number for mapping
+  startingInvoiceNumber?: number; // Starting invoice number that corresponds to startingOrderNumber
 }
 
 export const businessSettingsStorage = {
@@ -263,6 +265,8 @@ const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   autoIncrement: true,
   defaultPaymentTerms: 30,
   defaultPaymentMethod: 'Bank Transfer',
+  startingOrderNumber: undefined,
+  startingInvoiceNumber: undefined,
 };
 
 export const invoiceSettingsStorage = {
@@ -311,6 +315,36 @@ export const invoiceSettingsStorage = {
     } catch (error) {
       console.error('Error getting next invoice number:', error);
       return `${DEFAULT_INVOICE_SETTINGS.prefix}${DEFAULT_INVOICE_SETTINGS.startingNumber}`;
+    }
+  },
+
+  // Get invoice number based on order number using the mapping
+  getInvoiceNumberFromOrderNumber: (orderNumber: string): string => {
+    if (typeof window === 'undefined') return `${DEFAULT_INVOICE_SETTINGS.prefix}${DEFAULT_INVOICE_SETTINGS.startingNumber}`;
+    try {
+      const settings = invoiceSettingsStorage.get();
+      
+      // Extract numeric part from order number
+      const orderMatch = orderNumber.match(/(\d+)(?!.*\d)/);
+      if (!orderMatch) {
+        // If no number found in order, fall back to regular method
+        return invoiceSettingsStorage.getNextInvoiceNumber();
+      }
+      
+      const orderNum = parseInt(orderMatch[1], 10);
+      
+      // If mapping is configured, use it
+      if (settings.startingOrderNumber !== undefined && settings.startingInvoiceNumber !== undefined) {
+        const orderDiff = orderNum - settings.startingOrderNumber;
+        const invoiceNum = settings.startingInvoiceNumber + orderDiff;
+        return `${settings.prefix}${invoiceNum}`;
+      }
+      
+      // Fall back to regular method
+      return invoiceSettingsStorage.getNextInvoiceNumber();
+    } catch (error) {
+      console.error('Error getting invoice number from order number:', error);
+      return invoiceSettingsStorage.getNextInvoiceNumber();
     }
   },
 };
