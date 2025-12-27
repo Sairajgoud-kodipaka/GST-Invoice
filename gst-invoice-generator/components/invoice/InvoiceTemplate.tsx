@@ -1050,7 +1050,8 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             * Subject to Hyderabad Jurisdiction     Only Generated from: {website}
           </span>
           {!hidePageNumbers && (
-            <span style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline', marginLeft: '8px' }}>
+            <span style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline' }}>
+              {'     '}
               Page{' '}
               <span className="page-number-screen" style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? currentPage : 1}</span>
               <span className="page-number-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
