@@ -369,11 +369,19 @@ export async function POST(request: NextRequest) {
       const sanitizeFilename = (filename: string) => filename.replace(/[<>:"/\\|?*]/g, '_');
 
       // First pass: Generate all PDFs without page numbers and merge them
+      // Track which invoice each page belongs to for proper footer positioning
+      const pageToInvoiceMap: { pageIndex: number; invoice: InvoiceData }[] = [];
+      let currentPageIndex = 0;
+      
       for (const invoice of invoices as InvoiceData[]) {
         const pdfBytes = await generateSinglePDF(browser, invoice, appUrl, true); // hidePageNumbers = true
         const invoicePdf = await PDFDocument.load(pdfBytes);
         const pages = await pdfDoc.copyPages(invoicePdf, invoicePdf.getPageIndices());
-        pages.forEach((page) => pdfDoc.addPage(page));
+        pages.forEach((page) => {
+          pdfDoc.addPage(page);
+          pageToInvoiceMap.push({ pageIndex: currentPageIndex, invoice });
+          currentPageIndex++;
+        });
       }
 
       // Get total page count
@@ -389,26 +397,47 @@ export async function POST(request: NextRequest) {
         const pageNumber = index + 1;
         const { width, height } = page.getSize();
         
-        // Calculate footer position (8mm from bottom, right-aligned)
+        // Get the invoice for this page to extract website info
+        const pageInvoice = pageToInvoiceMap[index]?.invoice;
+        const website = pageInvoice?.business?.email
+          ? pageInvoice.business.email.split('@')[1]
+          : 'pearlsbymangatrai.com';
+        
+        // Calculate footer position to match CSS footer styling
+        // CSS footer: bottom: '12mm', padding: '6px 0' (6px ≈ 0.15mm ≈ 0.43 points)
         // A4: 210mm × 297mm = 595.28 × 841.89 points
         // PDF margin: 3mm = 8.5 points (from PDF generation)
         // Invoice padding: 8mm = 22.68 points
-        // Footer is positioned at: 8mm from bottom of invoice content area
-        // Accounting for 3mm PDF margin: footer is at ~31 points from bottom of page
+        // CSS footer bottom: 12mm = 34.02 points from bottom of invoice content
+        // Accounting for PDF margin: footer is at 8.5 + 12mm = 8.5 + 34.02 = 42.52 points from bottom of page
+        // Plus half of padding (6px/2 = 3px ≈ 0.22 points) for vertical centering
         const pdfMargin = 8.5; // 3mm in points
-        const invoicePadding = 22.68; // 8mm in points
-        const footerY = pdfMargin + invoicePadding; // Position from bottom of page
-        const footerText = `Page ${pageNumber} of ${totalPages}`;
-        const textWidth = helveticaFont.widthOfTextAtSize(footerText, 6.35);
-        const footerX = width - pdfMargin - invoicePadding - textWidth; // Right-aligned
+        const footerBottomOffset = 34.02; // 12mm in points (matches CSS bottom: '12mm')
+        const footerPadding = 0.43; // 6px ≈ 0.43 points (half for vertical center)
+        const footerY = pdfMargin + footerBottomOffset + footerPadding; // Position from bottom of page
         
-        // Draw page number text (no need to cover old text since we hid it during generation)
+        // Calculate text position - match the CSS footer which has "Generated from: website Page X of Y"
+        // The page number should align right after "Generated from: website"
+        const footerText = `Page ${pageNumber} of ${totalPages}`;
+        const fontSize = 6.35; // 9px ≈ 6.35 points (matches CSS fontSize: '9px')
+        const textWidth = helveticaFont.widthOfTextAtSize(footerText, fontSize);
+        
+        // Calculate the width of "Generated from: " + website text
+        const prefixText = `Generated from: ${website} `;
+        const prefixWidth = helveticaFont.widthOfTextAtSize(prefixText, fontSize);
+        
+        // Right-align: width - margin - invoice padding - prefix width - page number width
+        // Match the CSS: right: '8mm' (22.68 points)
+        const invoicePadding = 22.68; // 8mm in points
+        const footerX = width - pdfMargin - invoicePadding - prefixWidth - textWidth; // Positioned after "Generated from: website"
+        
+        // Draw page number text aligned with the footer
         page.drawText(footerText, {
           x: footerX,
           y: footerY,
-          size: 6.35, // 9px ≈ 6.35 points
+          size: fontSize,
           font: helveticaFont,
-          color: rgb(0.4, 0.4, 0.4), // Gray to match existing
+          color: rgb(0, 0, 0), // Black to match CSS color: '#000'
         });
       });
 

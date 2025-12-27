@@ -1052,16 +1052,16 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             alignItems: 'center',
           }}
         >
-          <span style={{ lineHeight: '1.4', verticalAlign: 'middle' }}>* Subject to Hyderabad Jurisdiction Only</span>
-          <span style={{ lineHeight: '1.4', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+          <span style={{ lineHeight: '1.4' }}>* Subject to Hyderabad Jurisdiction Only</span>
+          <span style={{ lineHeight: '1.4', whiteSpace: 'nowrap' }}>
             Generated from: {website}
             {!hidePageNumbers && (
               <>
                 {' '}Page{' '}
-                <span className="page-number-screen" style={{ display: 'inline', lineHeight: '1.4', verticalAlign: 'middle', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? currentPage : 1}</span>
+                <span className="page-number-screen" style={{ display: 'inline', lineHeight: '1.4', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? currentPage : 1}</span>
                 <span className="page-number-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
                 {' of '}
-                <span className="total-pages-screen" style={{ display: 'inline', lineHeight: '1.4', verticalAlign: 'middle', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? totalPages : 1}</span>
+                <span className="total-pages-screen" style={{ display: 'inline', lineHeight: '1.4', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? totalPages : 1}</span>
                 <span className="total-pages-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
               </>
             )}
@@ -1148,10 +1148,8 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           }
           
           .invoice-page-footer > span {
-            display: inline !important;
             white-space: nowrap !important;
             line-height: 1.4 !important;
-            vertical-align: middle !important;
           }
           
           .invoice-page-footer > span:last-child {
@@ -1159,8 +1157,8 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           }
           
           .invoice-page-footer > span > span {
-            vertical-align: middle !important;
             line-height: 1.4 !important;
+            vertical-align: baseline !important;
           }
           
           /* Hide screen-based page numbers in print */
@@ -1172,7 +1170,7 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           /* Show print-based page numbers using CSS counters */
           .invoice-page-footer .page-number-print {
             display: inline !important;
-            line-height: 1.2 !important;
+            line-height: 1.4 !important;
             font-size: inherit !important;
             font-weight: inherit !important;
             color: inherit !important;
@@ -1190,7 +1188,7 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           
           .invoice-page-footer .total-pages-print {
             display: inline !important;
-            line-height: 1.2 !important;
+            line-height: 1.4 !important;
             font-size: inherit !important;
             font-weight: inherit !important;
             color: inherit !important;
