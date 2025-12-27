@@ -1040,23 +1040,23 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             fontSize: '9px',
             color: '#000',
             fontWeight: 'bold',
-            display: 'flex',
-            alignItems: 'baseline',
+            lineHeight: '1',
             whiteSpace: 'nowrap',
-            lineHeight: '1.2',
+            fontFamily: 'inherit',
+            display: 'block',
           }}
         >
-          <span>
+          <span style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline' }}>
             * Subject to Hyderabad Jurisdiction     Only Generated from: {website}
           </span>
           {!hidePageNumbers && (
-            <span style={{ marginLeft: '8px' }}>
+            <span style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline', marginLeft: '8px' }}>
               Page{' '}
-              <span className="page-number-screen">{isClient ? currentPage : 1}</span>
-              <span className="page-number-print" />
+              <span className="page-number-screen" style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? currentPage : 1}</span>
+              <span className="page-number-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
               {' of '}
-              <span className="total-pages-screen">{isClient ? totalPages : 1}</span>
-              <span className="total-pages-print" />
+              <span className="total-pages-screen" style={{ display: 'inline', lineHeight: '1', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? totalPages : 1}</span>
+              <span className="total-pages-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
             </span>
           )}
         </div>
@@ -1138,6 +1138,14 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           /* Show print-based page numbers using CSS counters */
           .invoice-page-footer .page-number-print {
             display: inline !important;
+            line-height: 1 !important;
+            font-size: inherit !important;
+            font-weight: inherit !important;
+            color: inherit !important;
+            vertical-align: baseline !important;
+            width: auto !important;
+            height: auto !important;
+            overflow: visible !important;
           }
           
           .invoice-page-footer .page-number-print::before {
@@ -1146,6 +1154,14 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           
           .invoice-page-footer .total-pages-print {
             display: inline !important;
+            line-height: 1 !important;
+            font-size: inherit !important;
+            font-weight: inherit !important;
+            color: inherit !important;
+            vertical-align: baseline !important;
+            width: auto !important;
+            height: auto !important;
+            overflow: visible !important;
           }
           
           .invoice-page-footer .total-pages-print::before {
