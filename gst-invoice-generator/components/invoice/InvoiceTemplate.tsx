@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
 import { InvoiceData } from '@/app/types/invoice';
 import { formatCurrency } from '@/app/lib/invoice-formatter';
 
@@ -52,6 +53,57 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
 
   const stampType = getStampType();
 
+  // Dynamic pagination state - for client-side rendering
+  // For print/PDF, CSS counters will handle page numbers automatically
+  const isClient = typeof window !== 'undefined';
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const invoicePageRef = useRef<HTMLDivElement>(null);
+
+  // Calculate page numbers for screen view (only on client)
+  useEffect(() => {
+    if (!isClient || !invoicePageRef.current) {
+      // Server-side: default to 1 page
+      setTotalPages(1);
+      setCurrentPage(1);
+      return;
+    }
+    
+    const calculatePages = () => {
+      const pageElement = invoicePageRef.current;
+      if (!pageElement) return;
+      
+      // A4 page height: 297mm = 1122.52px (at 96 DPI)
+      // Account for padding: 8mm top + 8mm bottom = 16mm = 60.47px
+      // Usable height: 297mm - 16mm = 281mm = 1062.05px
+      // Also account for footer space: ~20px
+      const pageHeight = 1040; // Approximate usable height in pixels
+      const contentHeight = pageElement.scrollHeight;
+      const calculatedPages = Math.max(1, Math.ceil(contentHeight / pageHeight));
+      
+      setTotalPages(calculatedPages);
+      setCurrentPage(1); // For single-page view, always show page 1
+    };
+    
+    // Calculate on mount and resize
+    calculatePages();
+    const resizeTimer = setTimeout(calculatePages, 100); // Small delay for layout
+    
+    window.addEventListener('resize', calculatePages);
+    
+    // Use ResizeObserver for more accurate detection
+    const resizeObserver = new ResizeObserver(() => {
+      setTimeout(calculatePages, 100);
+    });
+    resizeObserver.observe(invoicePageRef.current);
+    
+    return () => {
+      clearTimeout(resizeTimer);
+      window.removeEventListener('resize', calculatePages);
+      resizeObserver.disconnect();
+    };
+  }, [invoice, isClient]);
+
   return (
     <div
       className="invoice-template bg-white text-black"
@@ -65,6 +117,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
     >
       {/* A4 page with margins similar to PDF */}
       <div
+        ref={invoicePageRef}
         className="mx-auto invoice-page"
         style={{
           width: '210mm',
@@ -877,7 +930,7 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
             borderTop: '1px solid #999',
             paddingTop: '4px',
             fontSize: '8px',
-            paddingBottom: '4px',
+            paddingBottom: '20px', // Space for bottom footer text
           }}
         >
           <div style={{ marginBottom: '4px', fontWeight: 600 }}>E & O.E</div>
@@ -973,21 +1026,34 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           </div>
         </div>
 
-        {/* Page footer text inside the invoice border */}
+        {/* Page footer text at the bottom of the invoice */}
         <div
+          className="invoice-page-footer"
           style={{
-            width: '100%',
-            padding: '2px 0 0 0',
-            marginTop: '16px',
+            position: 'absolute',
+            bottom: '8mm',
+            left: '8mm',
+            right: '8mm',
+            width: 'calc(100% - 16mm)',
+            padding: '2px 0',
             fontSize: '8px',
             color: '#666',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            flexDirection: 'column',
+            gap: '2px',
           }}
         >
-          <div style={{ fontWeight: 'bold', color: '#000', fontSize: '9px' }}>* Subject to Hyderabad Jurisdiction Only</div>
-          <div style={{ fontSize: '9px' }}>Generated from {business.name} - Page 1 of 1</div>
+          <div style={{ fontWeight: 'bold', color: '#000', fontSize: '9px' }}>
+            * Subject to Hyderabad Jurisdiction Only Generated from {business.name}
+          </div>
+          <div style={{ fontSize: '9px', textAlign: 'right' }}>
+            Page{' '}
+            <span className="page-number-screen">{isClient ? currentPage : 1}</span>
+            <span className="page-number-print" />
+            {' of '}
+            <span className="total-pages-screen">{isClient ? totalPages : 1}</span>
+            <span className="total-pages-print" />
+          </div>
         </div>
       </div>
 
@@ -1057,11 +1123,40 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           .line-items-table {
             page-break-inside: avoid !important;
           }
+          
+          /* Hide screen-based page numbers in print */
+          .invoice-page-footer .page-number-screen,
+          .invoice-page-footer .total-pages-screen {
+            display: none !important;
+          }
+          
+          /* Show print-based page numbers using CSS counters */
+          .invoice-page-footer .page-number-print {
+            display: inline !important;
+          }
+          
+          .invoice-page-footer .page-number-print::before {
+            content: counter(page);
+          }
+          
+          .invoice-page-footer .total-pages-print {
+            display: inline !important;
+          }
+          
+          .invoice-page-footer .total-pages-print::before {
+            content: counter(pages);
+          }
         }
         
         @media screen {
           .invoice-template {
             background: #f5f5f5;
+          }
+          
+          /* Hide print-based page numbers on screen */
+          .invoice-page-footer .page-number-print,
+          .invoice-page-footer .total-pages-print {
+            display: none !important;
           }
         }
       `}</style>
