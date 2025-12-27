@@ -1136,6 +1136,22 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             page-break-inside: avoid !important;
           }
           
+          /* Ensure footer stays on one line in print */
+          .invoice-page-footer {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            white-space: nowrap !important;
+            flex-wrap: nowrap !important;
+          }
+          
+          .invoice-page-footer > span {
+            display: inline-flex !important;
+            align-items: center !important;
+            white-space: nowrap !important;
+          }
+          
           /* Hide screen-based page numbers in print */
           .invoice-page-footer .page-number-screen,
           .invoice-page-footer .total-pages-screen {
@@ -1145,7 +1161,7 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           /* Show print-based page numbers using CSS counters */
           .invoice-page-footer .page-number-print {
             display: inline !important;
-            line-height: 1 !important;
+            line-height: 1.2 !important;
             font-size: inherit !important;
             font-weight: inherit !important;
             color: inherit !important;
@@ -1153,6 +1169,8 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             width: auto !important;
             height: auto !important;
             overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           
           .invoice-page-footer .page-number-print::before {
@@ -1161,7 +1179,7 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           
           .invoice-page-footer .total-pages-print {
             display: inline !important;
-            line-height: 1 !important;
+            line-height: 1.2 !important;
             font-size: inherit !important;
             font-weight: inherit !important;
             color: inherit !important;
@@ -1169,6 +1187,8 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             width: auto !important;
             height: auto !important;
             overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           
           .invoice-page-footer .total-pages-print::before {
