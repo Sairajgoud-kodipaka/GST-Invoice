@@ -28,6 +28,7 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
 
   // Footer spacing constants
   const SPACES_50 = ' '.repeat(50);
+  const SPACES_100 = ' '.repeat(100);
   const SPACES_5 = ' '.repeat(5);
 
   // for extra empty rows (to mimic fixed-height table in PDF)
@@ -1049,7 +1050,7 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             fontFamily: 'inherit',
           }}
         >
-          * Subject to Hyderabad Jurisdiction{SPACES_50}Only Generated from: {website}{SPACES_5}
+          * Subject to Hyderabad Jurisdiction Only {SPACES_100}Generated from: {website}{SPACES_5}
           {!hidePageNumbers && (
             <>
               Page{' '}
