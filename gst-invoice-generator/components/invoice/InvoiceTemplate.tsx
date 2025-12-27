@@ -26,6 +26,10 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
     ? business.email.split('@')[1]
     : 'pearlsbymangatrai.com';
 
+  // Footer spacing constants
+  const SPACES_50 = ' '.repeat(50);
+  const SPACES_5 = ' '.repeat(5);
+
   // for extra empty rows (to mimic fixed-height table in PDF)
   const MIN_ROWS = 5;
   const emptyRows =
@@ -1045,7 +1049,7 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             fontFamily: 'inherit',
           }}
         >
-          * Subject to Hyderabad Jurisdiction{'     '}Only Generated from: {website}{'     '}
+          * Subject to Hyderabad Jurisdiction{SPACES_50}Only Generated from: {website}{SPACES_5}
           {!hidePageNumbers && (
             <>
               Page{' '}
