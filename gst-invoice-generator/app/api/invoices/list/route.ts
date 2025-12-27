@@ -23,19 +23,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform Supabase data to match the Invoice interface
-    const invoices = (data || []).map((inv) => ({
-      id: inv.id,
-      invoiceNumber: inv.invoice_no,
-      orderNumber: inv.order_no,
-      invoiceDate: inv.invoice_date,
-      orderDate: inv.order_date || '',
-      customerName: inv.customer_name || '',
-      totalAmount: inv.total_amount ? parseFloat(inv.total_amount.toString()) : 0,
-      invoiceData: inv.invoice_data || {},
-      createdAt: inv.created_at,
-      createdBy: inv.created_by || 'system',
-      updatedAt: inv.updated_at,
-    }));
+    const invoices = (data || []).map((inv) => {
+      // Extract orderId from invoice_data if available, otherwise use order_no
+      const invoiceData = inv.invoice_data || {};
+      const orderId = invoiceData.metadata?.orderNo || inv.order_no || '';
+      
+      return {
+        id: inv.id,
+        invoiceNumber: inv.invoice_no || '',
+        invoiceDate: inv.invoice_date || '',
+        orderNumber: inv.order_no || '',
+        orderId: orderId,
+        customerName: inv.customer_name || '',
+        amount: inv.total_amount ? parseFloat(inv.total_amount.toString()) : 0,
+        invoiceData: invoiceData,
+        createdAt: inv.created_at || new Date().toISOString(),
+      };
+    });
 
     return NextResponse.json({ invoices });
   } catch (error: any) {
