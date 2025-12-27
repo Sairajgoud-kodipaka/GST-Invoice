@@ -1037,31 +1037,31 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           className="invoice-page-footer"
           style={{
             position: 'absolute',
-            bottom: '8mm',
+            bottom: '10mm',
             left: '8mm',
             right: '8mm',
             width: 'calc(100% - 16mm)',
-            padding: '2px 0',
+            padding: '4px 0',
             fontSize: '9px',
             color: '#000',
             fontWeight: 'bold',
-            lineHeight: '1.2',
+            lineHeight: '1.4',
             fontFamily: 'inherit',
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center',
+            alignItems: 'baseline',
           }}
         >
-          <span style={{ lineHeight: '1.2', verticalAlign: 'baseline' }}>* Subject to Hyderabad Jurisdiction Only</span>
-          <span style={{ lineHeight: '1.2', verticalAlign: 'baseline', whiteSpace: 'nowrap' }}>
+          <span style={{ lineHeight: '1.4', verticalAlign: 'baseline', display: 'inline-block' }}>* Subject to Hyderabad Jurisdiction Only</span>
+          <span style={{ lineHeight: '1.4', verticalAlign: 'baseline', whiteSpace: 'nowrap', display: 'inline-block' }}>
             Generated from: {website}
             {!hidePageNumbers && (
               <>
                 {' '}Page{' '}
-                <span className="page-number-screen" style={{ display: 'inline', lineHeight: '1.2', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? currentPage : 1}</span>
+                <span className="page-number-screen" style={{ display: 'inline', lineHeight: '1.4', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? currentPage : 1}</span>
                 <span className="page-number-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
                 {' of '}
-                <span className="total-pages-screen" style={{ display: 'inline', lineHeight: '1.2', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? totalPages : 1}</span>
+                <span className="total-pages-screen" style={{ display: 'inline', lineHeight: '1.4', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? totalPages : 1}</span>
                 <span className="total-pages-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
               </>
             )}
@@ -1144,12 +1144,14 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             align-items: baseline !important;
             white-space: nowrap !important;
             flex-wrap: nowrap !important;
+            line-height: 1.4 !important;
           }
           
           .invoice-page-footer > span {
-            display: inline !important;
+            display: inline-block !important;
             white-space: nowrap !important;
-            line-height: 1.2 !important;
+            line-height: 1.4 !important;
+            vertical-align: baseline !important;
           }
           
           .invoice-page-footer > span:last-child {
