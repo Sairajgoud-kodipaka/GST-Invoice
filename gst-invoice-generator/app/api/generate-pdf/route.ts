@@ -22,9 +22,10 @@ async function safeClosePage(page: any) {
 }
 
 // ✅ Helper to get invoice HTML by fetching from internal URL (avoids auth issues)
-async function getInvoiceHTML(invoice: InvoiceData, baseUrl: string): Promise<string> {
+async function getInvoiceHTML(invoice: InvoiceData, baseUrl: string, hidePageNumbers: boolean = false): Promise<string> {
   const dataParam = encodeURIComponent(JSON.stringify(invoice));
-  const url = `${baseUrl}/invoice-render-ssr?data=${dataParam}`;
+  const hidePageNumbersParam = hidePageNumbers ? '&hidePageNumbers=true' : '';
+  const url = `${baseUrl}/invoice-render-ssr?data=${dataParam}${hidePageNumbersParam}`;
   
   console.log('🌐 Fetching invoice HTML from:', url.substring(0, 100) + '...');
   
@@ -64,7 +65,8 @@ async function getInvoiceHTML(invoice: InvoiceData, baseUrl: string): Promise<st
 async function generateSinglePDF(
   browser: any,
   invoice: InvoiceData,
-  baseUrl: string
+  baseUrl: string,
+  hidePageNumbers: boolean = false
 ): Promise<Buffer> {
   console.log(`📄 Generating PDF for invoice: ${invoice.metadata.invoiceNo}`);
   
@@ -79,7 +81,7 @@ async function generateSinglePDF(
     });
     
     // ✅ Get HTML via internal fetch (avoids auth issues)
-    let html = await getInvoiceHTML(invoice, baseUrl);
+    let html = await getInvoiceHTML(invoice, baseUrl, hidePageNumbers);
     
     // ✅ Convert relative image paths to absolute URLs so Puppeteer can load them
     // Next.js serves files from public/ folder at root URL
@@ -366,9 +368,9 @@ export async function POST(request: NextRequest) {
       const pdfDoc = await PDFDocument.create();
       const sanitizeFilename = (filename: string) => filename.replace(/[<>:"/\\|?*]/g, '_');
 
-      // First pass: Generate all PDFs and merge them
+      // First pass: Generate all PDFs without page numbers and merge them
       for (const invoice of invoices as InvoiceData[]) {
-        const pdfBytes = await generateSinglePDF(browser, invoice, appUrl);
+        const pdfBytes = await generateSinglePDF(browser, invoice, appUrl, true); // hidePageNumbers = true
         const invoicePdf = await PDFDocument.load(pdfBytes);
         const pages = await pdfDoc.copyPages(invoicePdf, invoicePdf.getPageIndices());
         pages.forEach((page) => pdfDoc.addPage(page));
@@ -389,25 +391,18 @@ export async function POST(request: NextRequest) {
         
         // Calculate footer position (8mm from bottom, right-aligned)
         // A4: 210mm × 297mm = 595.28 × 841.89 points
-        // 8mm = 22.68 points
-        // Footer is positioned at bottom: 8mm from bottom
-        const footerY = 22.68; // 8mm from bottom
+        // PDF margin: 3mm = 8.5 points (from PDF generation)
+        // Invoice padding: 8mm = 22.68 points
+        // Footer is positioned at: 8mm from bottom of invoice content area
+        // Accounting for 3mm PDF margin: footer is at ~31 points from bottom of page
+        const pdfMargin = 8.5; // 3mm in points
+        const invoicePadding = 22.68; // 8mm in points
+        const footerY = pdfMargin + invoicePadding; // Position from bottom of page
         const footerText = `Page ${pageNumber} of ${totalPages}`;
         const textWidth = helveticaFont.widthOfTextAtSize(footerText, 6.35);
-        const footerX = width - 22.68 - textWidth - 5; // Right-aligned with 5pt padding
+        const footerX = width - pdfMargin - invoicePadding - textWidth; // Right-aligned
         
-        // Draw white rectangle to cover old page number (approximate area)
-        // The page number is in the bottom right, approximately 60 points wide
-        page.drawRectangle({
-          x: footerX - 5,
-          y: footerY - 3,
-          width: textWidth + 20,
-          height: 10,
-          color: rgb(1, 1, 1), // White to cover old text
-          opacity: 1,
-        });
-        
-        // Draw new page number text
+        // Draw page number text (no need to cover old text since we hid it during generation)
         page.drawText(footerText, {
           x: footerX,
           y: footerY,

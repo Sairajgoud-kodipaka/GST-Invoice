@@ -6,9 +6,10 @@ import { formatCurrency } from '@/app/lib/invoice-formatter';
 
 interface InvoiceTemplateProps {
   invoice: InvoiceData;
+  hidePageNumbers?: boolean;
 }
 
-export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
+export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTemplateProps) {
   const {
     business,
     metadata,
@@ -1044,16 +1045,18 @@ export function InvoiceTemplate({ invoice }: InvoiceTemplateProps) {
           }}
         >
           <div style={{ fontWeight: 'bold', color: '#000', fontSize: '9px' }}>
-            * Subject to Hyderabad Jurisdiction Only Generated from {business.name}
+            * Subject to Hyderabad Jurisdiction Only Generated from: {website}
           </div>
-          <div style={{ fontSize: '9px', textAlign: 'right' }}>
-            Page{' '}
-            <span className="page-number-screen">{isClient ? currentPage : 1}</span>
-            <span className="page-number-print" />
-            {' of '}
-            <span className="total-pages-screen">{isClient ? totalPages : 1}</span>
-            <span className="total-pages-print" />
-          </div>
+          {!hidePageNumbers && (
+            <div style={{ fontSize: '9px', textAlign: 'right' }}>
+              Page{' '}
+              <span className="page-number-screen">{isClient ? currentPage : 1}</span>
+              <span className="page-number-print" />
+              {' of '}
+              <span className="total-pages-screen">{isClient ? totalPages : 1}</span>
+              <span className="total-pages-print" />
+            </div>
+          )}
         </div>
       </div>
 

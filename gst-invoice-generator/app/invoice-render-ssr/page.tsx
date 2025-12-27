@@ -5,6 +5,7 @@ import { InvoiceData } from '@/app/types/invoice';
 interface PageProps {
   searchParams: Promise<{
     data?: string;
+    hidePageNumbers?: string;
   }>;
 }
 
@@ -38,10 +39,12 @@ export default async function InvoiceRenderSSRPage({ searchParams }: PageProps) 
     );
   }
 
+  const hidePageNumbers = params.hidePageNumbers === 'true';
+
   return (
     <>
       {/* ✅ Server-rendered invoice - NO JavaScript needed */}
-      <InvoiceTemplate invoice={invoiceData} />
+      <InvoiceTemplate invoice={invoiceData} hidePageNumbers={hidePageNumbers} />
       
       {/* ✅ Print styles included directly - using dangerouslySetInnerHTML for Server Component */}
       <style dangerouslySetInnerHTML={{ __html: `
