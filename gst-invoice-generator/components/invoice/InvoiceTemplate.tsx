@@ -1053,17 +1053,17 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           }}
         >
           <span style={{ lineHeight: '1.2', verticalAlign: 'baseline' }}>* Subject to Hyderabad Jurisdiction Only</span>
-          <span style={{ display: 'flex', gap: '12px', alignItems: 'center', lineHeight: '1.2' }}>
-            <span style={{ lineHeight: '1.2', verticalAlign: 'baseline' }}>Generated from: {website}</span>
+          <span style={{ lineHeight: '1.2', verticalAlign: 'baseline', whiteSpace: 'nowrap' }}>
+            Generated from: {website}
             {!hidePageNumbers && (
-              <span style={{ lineHeight: '1.2', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>
-                Page{' '}
+              <>
+                {' '}Page{' '}
                 <span className="page-number-screen" style={{ display: 'inline', lineHeight: '1.2', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? currentPage : 1}</span>
                 <span className="page-number-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
                 {' of '}
                 <span className="total-pages-screen" style={{ display: 'inline', lineHeight: '1.2', verticalAlign: 'baseline', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }}>{isClient ? totalPages : 1}</span>
                 <span className="total-pages-print" style={{ display: 'none', lineHeight: '0', fontSize: '0', width: '0', height: '0', overflow: 'hidden' }} />
-              </span>
+              </>
             )}
           </span>
         </div>
@@ -1141,15 +1141,19 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             display: flex !important;
             flex-direction: row !important;
             justify-content: space-between !important;
-            align-items: center !important;
+            align-items: baseline !important;
             white-space: nowrap !important;
             flex-wrap: nowrap !important;
           }
           
           .invoice-page-footer > span {
-            display: inline-flex !important;
-            align-items: center !important;
+            display: inline !important;
             white-space: nowrap !important;
+            line-height: 1.2 !important;
+          }
+          
+          .invoice-page-footer > span:last-child {
+            text-align: right !important;
           }
           
           /* Hide screen-based page numbers in print */
