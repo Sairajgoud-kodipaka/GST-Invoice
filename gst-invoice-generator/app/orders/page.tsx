@@ -1266,12 +1266,10 @@ function OrdersContent() {
 
         {/* Orders Table */}
         {filteredOrders.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed rounded-lg">
-          <Upload className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No orders yet</h3>
-          <p className="text-muted-foreground mb-4">
+        <div className="flex flex-col items-center justify-center py-12">
+          <p className="text-muted-foreground">
               {orders.length === 0
-                ? 'Import orders from a CSV file to get started'
+                ? 'No orders yet. Click "Import Orders" to upload a CSV file.'
                 : 'No orders match your search'}
           </p>
         </div>

@@ -136,39 +136,64 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
           const expectedInvoiceNo = invoice.metadata.invoiceNo;
           const orderNo = invoice.metadata.orderNo;
           
-          // STRICT VALIDATION 1: Check if order already has an invoice (prevent regeneration)
-          const orderCheckResponse = await fetch('/api/invoices/check-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderNo }),
-          });
+          console.log(`Processing order ${orderNo} with expected invoice ${expectedInvoiceNo}`);
           
-          if (orderCheckResponse.ok) {
-            const orderCheck = await orderCheckResponse.json();
-            if (orderCheck.hasInvoice) {
-              // Order already has an invoice - prevent regeneration
+          // STRICT VALIDATION 1: Check if order already has an invoice (prevent regeneration)
+          try {
+            const orderCheckResponse = await fetch('/api/invoices/check-order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderNo }),
+            });
+            
+            if (orderCheckResponse.ok) {
+              const orderCheck = await orderCheckResponse.json();
+              if (orderCheck.hasInvoice) {
+                // Order already has an invoice - prevent regeneration
+                console.log(`Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}`);
+                skippedInvoices.push({
+                  invoiceNo: expectedInvoiceNo,
+                  reason: `Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}. Cannot regenerate invoices.`,
+                  orderNo: orderNo,
+                });
+                continue;
+              }
+            }
+          } catch (error) {
+            console.error(`Error checking order ${orderNo}:`, error);
+            skippedInvoices.push({
+              invoiceNo: expectedInvoiceNo,
+              reason: `Error checking if order has invoice: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              orderNo: orderNo,
+            });
+            continue;
+          }
+          
+          // STRICT VALIDATION 2: Check if invoice number already exists (prevent duplicates)
+          try {
+            const invoiceExistsCheck = await invoiceService.exists(expectedInvoiceNo);
+            if (invoiceExistsCheck.exists) {
+              // Invoice number already exists - this is a duplicate, do NOT skip numbers
+              console.log(`Invoice ${expectedInvoiceNo} already exists for order ${invoiceExistsCheck.invoice?.orderNo || 'unknown'}`);
               skippedInvoices.push({
                 invoiceNo: expectedInvoiceNo,
-                reason: `Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}. Cannot regenerate invoices.`,
+                reason: `Invoice ${expectedInvoiceNo} already exists for order ${invoiceExistsCheck.invoice?.orderNo || 'unknown'}. Cannot use duplicate invoice number.`,
                 orderNo: orderNo,
               });
               continue;
             }
-          }
-          
-          // STRICT VALIDATION 2: Check if invoice number already exists (prevent duplicates)
-          const invoiceExistsCheck = await invoiceService.exists(expectedInvoiceNo);
-          if (invoiceExistsCheck.exists) {
-            // Invoice number already exists - this is a duplicate, do NOT skip numbers
+          } catch (error) {
+            console.error(`Error checking invoice ${expectedInvoiceNo}:`, error);
             skippedInvoices.push({
               invoiceNo: expectedInvoiceNo,
-              reason: `Invoice ${expectedInvoiceNo} already exists for order ${invoiceExistsCheck.invoice?.orderNo || 'unknown'}. Cannot use duplicate invoice number.`,
+              reason: `Error checking if invoice exists: ${error instanceof Error ? error.message : 'Unknown error'}`,
               orderNo: orderNo,
             });
             continue;
           }
           
           // Invoice number is available and matches expected mapping - create it
+          console.log(`Creating invoice ${expectedInvoiceNo} for order ${orderNo}`);
           const createResult = await invoiceService.create(
             expectedInvoiceNo,
             orderNo,
@@ -183,10 +208,12 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
           
           if (createResult.success) {
             // Successfully created with the expected invoice number
+            console.log(`Successfully created invoice ${expectedInvoiceNo} for order ${orderNo}`);
             invoice.metadata.invoiceNo = expectedInvoiceNo;
             invoicesWithNumbers.push(invoice);
           } else if (createResult.exists) {
             // Duplicate detected during creation (race condition)
+            console.log(`Invoice creation failed - duplicate detected for order ${orderNo}`);
             if (createResult.orderExists) {
               // Order already has an invoice - prevent regeneration
               skippedInvoices.push({
@@ -204,6 +231,7 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
             }
           } else {
             // Other error
+            console.error(`Failed to create invoice ${expectedInvoiceNo} for order ${orderNo}:`, createResult.error);
             skippedInvoices.push({
               invoiceNo: expectedInvoiceNo,
               reason: createResult.error || 'Failed to create invoice',
@@ -211,6 +239,8 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
             });
           }
         }
+        
+        console.log(`Processed ${rawInvoices.length} invoices: ${invoicesWithNumbers.length} created, ${skippedInvoices.length} skipped`);
 
         setProgress(fileProgressStart + fileProgressRange * 0.7);
 
@@ -230,21 +260,33 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
 
         // Show warnings for skipped invoices
         if (skippedInvoices.length > 0) {
-          const skippedDetails = skippedInvoices.map(s => 
-            `Invoice ${s.invoiceNo} (Order: ${s.orderNo}): ${s.reason}`
+          const skippedDetails = skippedInvoices.slice(0, 5).map(s => 
+            `Order ${s.orderNo}: ${s.reason}`
           ).join('\n');
+          const moreCount = skippedInvoices.length > 5 ? `\n... and ${skippedInvoices.length - 5} more` : '';
           
           toast({
-            title: 'Some invoices were skipped',
-            description: `${skippedInvoices.length} invoice(s) could not be created. ${skippedDetails}`,
+            title: skippedInvoices.length === rawInvoices.length 
+              ? 'All invoices were skipped' 
+              : 'Some invoices were skipped',
+            description: `${skippedInvoices.length} invoice(s) could not be created:\n${skippedDetails}${moreCount}`,
             variant: 'destructive',
+            duration: 10000, // Show for 10 seconds
           });
         }
 
         allInvoices.push(...finalInvoices);
+        
+        // Determine if this file was successful
+        const hasSuccessfulInvoices = finalInvoices.length > 0;
+        const allWereSkipped = skippedInvoices.length === rawInvoices.length && rawInvoices.length > 0;
+        
         processedFiles.push({
           name: file.name,
-          success: true,
+          success: hasSuccessfulInvoices,
+          error: allWereSkipped 
+            ? `All ${rawInvoices.length} invoice(s) were skipped. See details in toast notification above.`
+            : undefined,
           invoiceCount: finalInvoices.length,
         });
         setProgress(fileProgressStart + fileProgressRange * 0.9);
@@ -291,7 +333,13 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
       if (totalInvoices > 0) {
         onInvoicesReady(allInvoices);
       } else {
-        onError('No invoices were generated from the uploaded files.');
+        // Check if all invoices were skipped
+        const allSkipped = processedFiles.every(f => f.error && f.error.includes('skipped'));
+        if (allSkipped) {
+          onError('All invoices were skipped. This usually means:\n1. Orders already have invoices (cannot regenerate)\n2. Invoice numbers already exist (duplicates)\n\nCheck the browser console for detailed logs.');
+        } else {
+          onError('No invoices were generated from the uploaded files. Please check the CSV format and try again.');
+        }
         setStep('upload');
       }
     }
