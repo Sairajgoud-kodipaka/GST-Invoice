@@ -20,6 +20,7 @@ export interface CreateInvoiceResponse {
   invoice?: any;
   error?: string;
   exists?: boolean;
+  orderExists?: boolean;
   existingInvoice?: {
     invoiceNo: string;
     orderNo: string;
