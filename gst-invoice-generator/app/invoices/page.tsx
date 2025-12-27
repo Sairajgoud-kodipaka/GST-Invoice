@@ -42,22 +42,34 @@ function InvoicesContent() {
   const itemsPerPage = 20;
 
   useEffect(() => {
-    const loadInvoices = () => {
-      const allInvoices = invoicesStorage.getAll();
-      setInvoices(allInvoices);
+    const loadInvoices = async () => {
+      try {
+        const response = await fetch('/api/invoices/list');
+        if (response.ok) {
+          const data = await response.json();
+          const loadedInvoices = data.invoices || [];
+          setInvoices(loadedInvoices);
+          
+          // Check for invoiceId in URL params after loading
+          const invoiceId = searchParams.get('invoiceId');
+          if (invoiceId) {
+            const invoice = loadedInvoices.find((inv: Invoice) => inv.id === invoiceId);
+            if (invoice) {
+              setPreviewInvoice(invoice);
+              setIsPreviewOpen(true);
+            }
+          }
+        } else {
+          console.error('Failed to load invoices from API');
+          setInvoices([]);
+        }
+      } catch (error) {
+        console.error('Error loading invoices:', error);
+        setInvoices([]);
+      }
     };
 
     loadInvoices();
-    
-    // Check for invoiceId in URL params
-    const invoiceId = searchParams.get('invoiceId');
-    if (invoiceId) {
-      const invoice = invoicesStorage.getById(invoiceId);
-      if (invoice) {
-        setPreviewInvoice(invoice);
-        setIsPreviewOpen(true);
-      }
-    }
     
     // Refresh every 5 seconds
     const interval = setInterval(loadInvoices, 5000);
