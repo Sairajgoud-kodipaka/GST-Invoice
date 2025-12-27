@@ -682,7 +682,6 @@ function OrdersContent() {
       const newOrders = generatedInvoices.map(invoiceDataToOrder);
       ordersStorage.addMany(newOrders);
       setOrders(ordersStorage.getAll());
-    setIsImportModalOpen(false);
       toast({
         title: 'Success',
         description: `${newOrders.length} order(s) imported successfully`,
@@ -1261,12 +1260,6 @@ function OrdersContent() {
                 ? 'Import orders from a CSV file to get started'
                 : 'No orders match your search'}
           </p>
-            {orders.length === 0 && (
-              <Button onClick={() => setIsImportModalOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Import Orders
-              </Button>
-            )}
         </div>
       ) : (
           <>

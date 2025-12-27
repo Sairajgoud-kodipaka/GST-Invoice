@@ -125,79 +125,90 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
 
         setProgress(fileProgressStart + fileProgressRange * 0.5);
 
-        // Assign invoice numbers from Supabase (with duplicate checking)
+        // Use invoice numbers already set by field-mapper (which uses order-based mapping)
+        // Check for duplicates and create invoices in Supabase
         const invoicesWithNumbers: InvoiceData[] = [];
         const skippedInvoices: Array<{ invoiceNo: string; reason: string; orderNo: string }> = [];
         
-        let currentInvoiceNo = await invoiceService.getNext();
-        
         for (const invoice of rawInvoices) {
-          let invoiceNoToUse = currentInvoiceNo;
-          let attempts = 0;
-          const maxAttempts = 10; // Prevent infinite loop
+          // Use the invoice number that was already set by the field-mapper
+          // This respects the order-based mapping configured in settings
+          const expectedInvoiceNo = invoice.metadata.invoiceNo;
+          const orderNo = invoice.metadata.orderNo;
           
-          // Try to create invoice in Supabase (checks for duplicates)
-          while (attempts < maxAttempts) {
-            const existsCheck = await invoiceService.exists(invoiceNoToUse);
-            
-            if (existsCheck.exists) {
-              // Invoice number already exists, try next one
-              invoiceNoToUse = invoiceService.incrementInvoiceNumber(invoiceNoToUse);
-              attempts++;
-              
-              if (attempts >= maxAttempts) {
-                skippedInvoices.push({
-                  invoiceNo: currentInvoiceNo,
-                  reason: `Could not find available invoice number after ${maxAttempts} attempts`,
-                  orderNo: invoice.metadata.orderNo,
-                });
-                break;
-              }
-            } else {
-              // Invoice number is available, create it in Supabase
-              const createResult = await invoiceService.create(
-                invoiceNoToUse,
-                invoice.metadata.orderNo,
-                invoice.metadata.invoiceDate,
-                {
-                  orderDate: invoice.metadata.orderDate,
-                  customerName: invoice.billToParty.name,
-                  totalAmount: invoice.taxSummary.totalAmountAfterTax,
-                  invoiceData: invoice,
-                }
-              );
-              
-              if (createResult.success) {
-                // Successfully created, use this invoice number
-                invoice.metadata.invoiceNo = invoiceNoToUse;
-                invoicesWithNumbers.push(invoice);
-                currentInvoiceNo = invoiceService.incrementInvoiceNumber(invoiceNoToUse);
-                break;
-              } else if (createResult.exists) {
-                // Check if it's an order number duplicate (not just invoice number)
-                if (createResult.existingInvoice && createResult.existingInvoice.orderNo === invoice.metadata.orderNo) {
-                  // Order already has an invoice, skip this order
-                  skippedInvoices.push({
-                    invoiceNo: invoiceNoToUse,
-                    reason: `Order ${invoice.metadata.orderNo} already has invoice ${createResult.existingInvoice.invoiceNo}`,
-                    orderNo: invoice.metadata.orderNo,
-                  });
-                  break;
-                } else {
-                  // Race condition - invoice number was taken, try next number
-                  invoiceNoToUse = invoiceService.incrementInvoiceNumber(invoiceNoToUse);
-                  attempts++;
-                }
-              } else {
-                // Other error
-                skippedInvoices.push({
-                  invoiceNo: invoiceNoToUse,
-                  reason: createResult.error || 'Failed to create invoice',
-                  orderNo: invoice.metadata.orderNo,
-                });
-                break;
-              }
+          // STRICT VALIDATION 1: Check if order already has an invoice (prevent regeneration)
+          const orderCheckResponse = await fetch('/api/invoices/check-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderNo }),
+          });
+          
+          if (orderCheckResponse.ok) {
+            const orderCheck = await orderCheckResponse.json();
+            if (orderCheck.hasInvoice) {
+              // Order already has an invoice - prevent regeneration
+              skippedInvoices.push({
+                invoiceNo: expectedInvoiceNo,
+                reason: `Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}. Cannot regenerate invoices.`,
+                orderNo: orderNo,
+              });
+              continue;
             }
+          }
+          
+          // STRICT VALIDATION 2: Check if invoice number already exists (prevent duplicates)
+          const invoiceExistsCheck = await invoiceService.exists(expectedInvoiceNo);
+          if (invoiceExistsCheck.exists) {
+            // Invoice number already exists - this is a duplicate, do NOT skip numbers
+            skippedInvoices.push({
+              invoiceNo: expectedInvoiceNo,
+              reason: `Invoice ${expectedInvoiceNo} already exists for order ${invoiceExistsCheck.invoice?.orderNo || 'unknown'}. Cannot use duplicate invoice number.`,
+              orderNo: orderNo,
+            });
+            continue;
+          }
+          
+          // Invoice number is available and matches expected mapping - create it
+          const createResult = await invoiceService.create(
+            expectedInvoiceNo,
+            orderNo,
+            invoice.metadata.invoiceDate,
+            {
+              orderDate: invoice.metadata.orderDate,
+              customerName: invoice.billToParty.name,
+              totalAmount: invoice.taxSummary.totalAmountAfterTax,
+              invoiceData: invoice,
+            }
+          );
+          
+          if (createResult.success) {
+            // Successfully created with the expected invoice number
+            invoice.metadata.invoiceNo = expectedInvoiceNo;
+            invoicesWithNumbers.push(invoice);
+          } else if (createResult.exists) {
+            // Duplicate detected during creation (race condition)
+            if (createResult.orderExists) {
+              // Order already has an invoice - prevent regeneration
+              skippedInvoices.push({
+                invoiceNo: expectedInvoiceNo,
+                reason: `Order ${orderNo} already has invoice ${createResult.existingInvoice?.invoiceNo || expectedInvoiceNo}. Cannot regenerate invoices.`,
+                orderNo: orderNo,
+              });
+            } else {
+              // Invoice number taken by different order - duplicate
+              skippedInvoices.push({
+                invoiceNo: expectedInvoiceNo,
+                reason: `Invoice ${expectedInvoiceNo} already exists for order ${createResult.existingInvoice?.orderNo || 'unknown'}. Cannot use duplicate invoice number.`,
+                orderNo: orderNo,
+              });
+            }
+          } else {
+            // Other error
+            skippedInvoices.push({
+              invoiceNo: expectedInvoiceNo,
+              reason: createResult.error || 'Failed to create invoice',
+              orderNo: orderNo,
+            });
           }
         }
 
