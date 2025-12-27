@@ -28,3 +28,4 @@ export interface SupabaseInvoice {
   updated_at: string;
 }
 
+

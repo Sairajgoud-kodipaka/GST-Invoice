@@ -45,32 +45,60 @@ async function generateSinglePDF(
     
     console.log('🌐 Navigating to:', url.substring(0, 100) + '...');
     
-    // ✅ Navigate with networkidle0 (wait for all network requests)
+    // ✅ Navigate with flexible wait strategy
+    // networkidle0 can be too strict on Vercel (analytics, etc.), so we use 'load' and then wait for selector
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
+    const navigationWaitUntil = isVercel ? 'load' : 'networkidle0';
+    
     await page.goto(url, {
-      waitUntil: 'networkidle0',
+      waitUntil: navigationWaitUntil,
       timeout: 60000,
     });
     
-    console.log('✅ Page loaded');
+    console.log('✅ Page loaded (waitUntil:', navigationWaitUntil, ')');
     
-    // ✅ Wait for invoice element to be visible (try both selectors)
+    // ✅ Wait for invoice element to be visible (try both selectors with longer timeouts for Vercel)
+    // Vercel can be slower, so we use longer timeouts
+    const selectorTimeout = isVercel ? 30000 : 15000; // 30s for Vercel, 15s for local
+    
+    let invoiceElementFound = false;
+    
+    // Try .invoice-page first (preferred selector)
     try {
+      console.log(`⏳ Waiting for .invoice-page (timeout: ${selectorTimeout}ms)...`);
       await page.waitForSelector('.invoice-page', {
         visible: true,
-        timeout: 15000,
+        timeout: selectorTimeout,
       });
       console.log('✅ Invoice element (.invoice-page) found');
-    } catch {
+      invoiceElementFound = true;
+    } catch (error) {
+      console.log('⚠️ .invoice-page not found, trying .invoice-template...');
       // Fallback: try .invoice-template
-      await page.waitForSelector('.invoice-template', {
-        visible: true,
-        timeout: 5000,
-      });
-      console.log('✅ Invoice element (.invoice-template) found');
+      try {
+        await page.waitForSelector('.invoice-template', {
+          visible: true,
+          timeout: selectorTimeout,
+        });
+        console.log('✅ Invoice element (.invoice-template) found');
+        invoiceElementFound = true;
+      } catch (fallbackError) {
+        console.error('❌ Both selectors failed. Checking page content...');
+        // Debug: log page content to understand what's happening
+        const bodyContent = await page.evaluate(() => document.body.innerHTML.substring(0, 500));
+        console.log('📄 Page body preview:', bodyContent);
+        throw new Error(`Invoice element not found. Tried .invoice-page and .invoice-template. Page may not have rendered correctly.`);
+      }
     }
     
-    // ✅ Small delay to ensure rendering is complete
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (!invoiceElementFound) {
+      throw new Error('Invoice element not found after waiting');
+    }
+    
+    // ✅ Additional wait to ensure rendering is complete (longer for Vercel)
+    const renderDelay = isVercel ? 2000 : 1000;
+    console.log(`⏳ Waiting ${renderDelay}ms for rendering to complete...`);
+    await new Promise(resolve => setTimeout(resolve, renderDelay));
     
     console.log('📄 Generating PDF...');
     
