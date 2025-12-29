@@ -936,7 +936,7 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
             borderTop: '1px solid #999',
             paddingTop: '4px',
             fontSize: '8px',
-            paddingBottom: '20px', // Space for bottom footer text
+            paddingBottom: '25px', // Increased space for bottom footer text and border clearance
           }}
         >
           <div style={{ marginBottom: '4px', fontWeight: 600 }}>E & O.E</div>
@@ -1037,7 +1037,7 @@ export function InvoiceTemplate({ invoice, hidePageNumbers = false }: InvoiceTem
           className="invoice-page-footer"
           style={{
             position: 'absolute',
-            bottom: '12mm',
+            bottom: '10mm', // Adjusted to ensure it's within the printable area
             left: '8mm',
             right: '8mm',
             width: 'calc(100% - 16mm)',

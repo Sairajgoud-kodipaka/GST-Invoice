@@ -94,20 +94,94 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingInvoice) {
-      // Invoice already exists
-      return NextResponse.json(
-        {
-          error: 'Invoice number already exists',
-          exists: true,
-          existingInvoice: {
-            invoiceNo: existingInvoice.invoice_no,
-            orderNo: existingInvoice.order_no,
-            createdAt: existingInvoice.created_at,
-            createdBy: existingInvoice.created_by || 'Unknown',
+      // Invoice already exists - check if it's for the same order (allow reuse/linking)
+      if (existingInvoice.order_no === orderNo) {
+        // Same order - update the invoice data instead of creating new one
+        console.log(`Invoice ${invoiceNo} already exists for order ${orderNo} - updating invoice data`);
+        
+        // Use order date as invoice date if invoice date is today's date
+        let invoiceDateToUse = finalInvoiceDate;
+        if (orderDate) {
+          // Helper function to format date as DD-MM-YYYY
+          function formatDateForUpdate(dateStr: string): string {
+            if (!dateStr) return '';
+            // If already in DD-MM-YYYY format, return as is
+            if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) return dateStr;
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr;
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}-${month}-${year}`;
+          }
+          const today = new Date();
+          const todayStr = formatDateForUpdate(today.toISOString());
+          if (finalInvoiceDate === todayStr || !finalInvoiceDate) {
+            invoiceDateToUse = orderDate;
+          }
+        }
+        
+        // Update invoice data metadata with correct invoice date
+        invoiceData.metadata.invoiceDate = invoiceDateToUse;
+        
+        const { data: updatedInvoice, error: updateError } = await supabase
+          .from('invoices')
+          .update({
+            invoice_date: invoiceDateToUse,
+            order_date: orderDate || existingInvoice.order_date || null,
+            customer_name: customerName || null,
+            total_amount: totalAmount || null,
+            invoice_data: finalInvoiceData,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('invoice_no', invoiceNo)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error('Error updating existing invoice:', updateError);
+          return NextResponse.json(
+            { error: 'Failed to update existing invoice', details: updateError.message },
+            { status: 500 }
+          );
+        }
+
+        // Update the order to mark it as having an invoice
+        if (updatedInvoice) {
+          const { error: updateOrderError } = await supabase
+            .from('orders')
+            .update({
+              has_invoice: true,
+              invoice_id: updatedInvoice.id,
+            })
+            .eq('order_no', orderNo);
+
+          if (updateOrderError) {
+            console.warn('Failed to update order after invoice update:', updateOrderError);
+          }
+        }
+
+        return NextResponse.json({
+          success: true,
+          invoice: updatedInvoice,
+          updated: true, // Flag to indicate this was an update, not a new creation
+        });
+      } else {
+        // Invoice exists for a DIFFERENT order - this is a conflict
+        return NextResponse.json(
+          {
+            error: `Invoice number ${invoiceNo} already exists for order ${existingInvoice.order_no}. Cannot use duplicate invoice number for different order.`,
+            exists: true,
+            existingInvoice: {
+              invoiceNo: existingInvoice.invoice_no,
+              orderNo: existingInvoice.order_no,
+              createdAt: existingInvoice.created_at,
+              createdBy: existingInvoice.created_by || 'Unknown',
+            },
           },
-        },
-        { status: 409 } // Conflict status code
-      );
+          { status: 409 } // Conflict status code
+        );
+      }
     }
 
     // Check if an invoice already exists for this order number (prevent regeneration)
@@ -127,21 +201,80 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingOrderInvoice) {
-      // Invoice already exists for this order number - prevent regeneration
-      return NextResponse.json(
-        {
-          error: `Order ${orderNo} already has invoice ${existingOrderInvoice.invoice_no}. Cannot regenerate invoices.`,
-          exists: true,
-          orderExists: true,
-          existingInvoice: {
-            invoiceNo: existingOrderInvoice.invoice_no,
-            orderNo: existingOrderInvoice.order_no,
-            createdAt: existingOrderInvoice.created_at,
-            createdBy: existingOrderInvoice.created_by || 'Unknown',
+      // Invoice already exists for this order number
+      // If it's the same invoice number, allow update (re-import scenario)
+      if (existingOrderInvoice.invoice_no === invoiceNo) {
+        console.log(`Order ${orderNo} already has invoice ${invoiceNo} - updating invoice data`);
+        
+        // Use order date as invoice date if invoice date is today's date
+        let invoiceDateToUse = finalInvoiceDate;
+        if (orderDate) {
+          // Helper function to format date as DD-MM-YYYY
+          function formatDate(dateStr: string): string {
+            if (!dateStr) return '';
+            // If already in DD-MM-YYYY format, return as is
+            if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) return dateStr;
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr;
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}-${month}-${year}`;
+          }
+          const today = new Date();
+          const todayStr = formatDate(today.toISOString());
+          if (finalInvoiceDate === todayStr || !finalInvoiceDate) {
+            invoiceDateToUse = orderDate;
+          }
+        }
+        
+        // Update invoice data metadata with correct invoice date
+        invoiceData.metadata.invoiceDate = invoiceDateToUse;
+        
+        const { data: updatedInvoice, error: updateError } = await supabase
+          .from('invoices')
+          .update({
+            invoice_date: invoiceDateToUse,
+            order_date: orderDate || existingOrderInvoice.order_date || null,
+            customer_name: customerName || null,
+            total_amount: totalAmount || null,
+            invoice_data: finalInvoiceData,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingOrderInvoice.id)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error('Error updating existing invoice:', updateError);
+          return NextResponse.json(
+            { error: 'Failed to update existing invoice', details: updateError.message },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          invoice: updatedInvoice,
+          updated: true, // Flag to indicate this was an update, not a new creation
+        });
+      } else {
+        // Order has a DIFFERENT invoice number - this is a conflict
+        return NextResponse.json(
+          {
+            error: `Order ${orderNo} already has invoice ${existingOrderInvoice.invoice_no}. Cannot assign different invoice number ${invoiceNo}.`,
+            exists: true,
+            orderExists: true,
+            existingInvoice: {
+              invoiceNo: existingOrderInvoice.invoice_no,
+              orderNo: existingOrderInvoice.order_no,
+              createdAt: existingOrderInvoice.created_at,
+              createdBy: existingOrderInvoice.created_by || 'Unknown',
+            },
           },
-        },
-        { status: 409 } // Conflict status code
-      );
+          { status: 409 } // Conflict status code
+        );
+      }
     }
 
     // Validate invoiceData structure - fail fast if incomplete
@@ -207,8 +340,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update metadata with correct invoiceDate if it differs
-    invoiceData.metadata.invoiceDate = finalInvoiceDate;
+    // Use order date as invoice date if invoice date is not provided or is today's date
+    // This ensures invoice date reflects when the order was created, not when invoice was generated
+    let finalInvoiceDateToUse = finalInvoiceDate;
+    if (orderDate) {
+      // Helper function to format date as DD-MM-YYYY
+      function formatDate(dateStr: string): string {
+        if (!dateStr) return '';
+        // If already in DD-MM-YYYY format, return as is
+        if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) return dateStr;
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr; // Return original if invalid
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}-${month}-${year}`;
+      }
+      
+      // If order date is available, use it as invoice date (more accurate than today's date)
+      // Only override if the invoice date seems to be today's date (to preserve explicit invoice dates from CSV)
+      const today = new Date();
+      const todayStr = formatDate(today.toISOString());
+      if (finalInvoiceDate === todayStr || !finalInvoiceDate) {
+        finalInvoiceDateToUse = orderDate;
+      }
+    }
+
+    // Update metadata with correct invoiceDate
+    invoiceData.metadata.invoiceDate = finalInvoiceDateToUse;
     if (orderDate) {
       invoiceData.metadata.orderDate = orderDate;
     }
@@ -221,7 +380,7 @@ export async function POST(request: NextRequest) {
       .insert({
         invoice_no: invoiceNo,
         order_no: orderNo,
-        invoice_date: finalInvoiceDate,
+        invoice_date: finalInvoiceDateToUse,
         order_date: orderDate || null,
         customer_name: customerName || null,
         total_amount: totalAmount || null,

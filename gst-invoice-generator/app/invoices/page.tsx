@@ -106,7 +106,14 @@ function InvoicesContent() {
     return new Date(year, month, day);
   };
 
-  // Filter invoices based on search and date range
+  // Helper function to extract numeric part from invoice number for sorting
+  const extractInvoiceNumber = (invoiceNo: string): number => {
+    // Extract the numeric part at the end (e.g., "O-/3628" -> 3628)
+    const match = invoiceNo.match(/(\d+)$/);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  // Filter invoices based on search and date range, then sort by invoice number
   const filteredInvoices = useMemo(() => {
     let filtered = invoices;
 
@@ -143,6 +150,13 @@ function InvoicesContent() {
         return invoiceDate <= toDate;
       });
     }
+
+    // Sort by invoice number (extract numeric part and sort descending)
+    filtered.sort((a, b) => {
+      const numA = extractInvoiceNumber(a.invoiceNumber);
+      const numB = extractInvoiceNumber(b.invoiceNumber);
+      return numB - numA; // Descending order (highest first)
+    });
 
     return filtered;
   }, [invoices, searchQuery, dateFrom, dateTo]);

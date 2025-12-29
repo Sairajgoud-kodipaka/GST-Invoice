@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import chromium from '@sparticuz/chromium';
 import JSZip from 'jszip';
-import { PDFDocument, rgb } from 'pdf-lib';
+import { PDFDocument } from 'pdf-lib';
 import { InvoiceData } from '@/app/types/invoice';
 
 // Import puppeteer packages - use puppeteer for local (includes Chromium), puppeteer-core for Vercel
@@ -22,10 +22,9 @@ async function safeClosePage(page: any) {
 }
 
 // ✅ Helper to get invoice HTML by fetching from internal URL (avoids auth issues)
-async function getInvoiceHTML(invoice: InvoiceData, baseUrl: string, hidePageNumbers: boolean = false): Promise<string> {
+async function getInvoiceHTML(invoice: InvoiceData, baseUrl: string): Promise<string> {
   const dataParam = encodeURIComponent(JSON.stringify(invoice));
-  const hidePageNumbersParam = hidePageNumbers ? '&hidePageNumbers=true' : '';
-  const url = `${baseUrl}/invoice-render-ssr?data=${dataParam}${hidePageNumbersParam}`;
+  const url = `${baseUrl}/invoice-render-ssr?data=${dataParam}`;
   
   console.log('🌐 Fetching invoice HTML from:', url.substring(0, 100) + '...');
   
@@ -65,9 +64,7 @@ async function getInvoiceHTML(invoice: InvoiceData, baseUrl: string, hidePageNum
 async function generateSinglePDF(
   browser: any,
   invoice: InvoiceData,
-  baseUrl: string,
-  hidePageNumbers: boolean = false,
-  isBatch: boolean = false
+  baseUrl: string
 ): Promise<Buffer> {
   console.log(`📄 Generating PDF for invoice: ${invoice.metadata.invoiceNo}`);
   
@@ -82,7 +79,7 @@ async function generateSinglePDF(
     });
     
     // ✅ Get HTML via internal fetch (avoids auth issues)
-    let html = await getInvoiceHTML(invoice, baseUrl, hidePageNumbers);
+    let html = await getInvoiceHTML(invoice, baseUrl);
     
     // ✅ Convert relative image paths to absolute URLs so Puppeteer can load them
     // Next.js serves files from public/ folder at root URL
@@ -229,17 +226,17 @@ async function generateSinglePDF(
     
     console.log('📄 Generating PDF...');
     
-    // ✅ Generate PDF with margins to prevent border clipping
-    // For batch mode, use slightly larger bottom margin to prevent border mixing
+    // ✅ Generate PDF with adequate margins to prevent border clipping
+    // Increased bottom margin to ensure footer and border are fully visible
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
       preferCSSPageSize: false, // Set to false to use explicit margins
       margin: { 
-        top: '3mm',    // Small margin to ensure border is visible
-        right: '3mm', 
-        bottom: isBatch ? '5mm' : '3mm',  // Larger bottom margin for batch to prevent border mixing
-        left: '3mm' 
+        top: '5mm',    // Adequate margin to ensure border is visible
+        right: '5mm', 
+        bottom: '8mm', // Increased bottom margin to prevent footer/border clipping
+        left: '5mm' 
       },
     });
     
@@ -370,80 +367,12 @@ export async function POST(request: NextRequest) {
       const pdfDoc = await PDFDocument.create();
       const sanitizeFilename = (filename: string) => filename.replace(/[<>:"/\\|?*]/g, '_');
 
-      // First pass: Generate all PDFs without page numbers and merge them
-      // Track which invoice each page belongs to for proper footer positioning
-      const pageToInvoiceMap: { pageIndex: number; invoice: InvoiceData }[] = [];
-      let currentPageIndex = 0;
-      
       for (const invoice of invoices as InvoiceData[]) {
-        // Generate PDF with batch flag to use larger bottom margin
-        const pdfBytes = await generateSinglePDF(browser, invoice, appUrl, true, true); // hidePageNumbers = true, isBatch = true
+        const pdfBytes = await generateSinglePDF(browser, invoice, appUrl);
         const invoicePdf = await PDFDocument.load(pdfBytes);
         const pages = await pdfDoc.copyPages(invoicePdf, invoicePdf.getPageIndices());
-        pages.forEach((page) => {
-          pdfDoc.addPage(page);
-          pageToInvoiceMap.push({ pageIndex: currentPageIndex, invoice });
-          currentPageIndex++;
-        });
+        pages.forEach((page) => pdfDoc.addPage(page));
       }
-
-      // Get total page count
-      const totalPages = pdfDoc.getPageCount();
-      console.log(`📄 Total pages in merged PDF: ${totalPages}`);
-
-      // Add page numbers to each page using pdf-lib
-      // We need to overlay the existing page numbers with correct ones
-      const helveticaFont = await pdfDoc.embedFont('Helvetica');
-      const pages = pdfDoc.getPages();
-      
-      pages.forEach((page, index) => {
-        const pageNumber = index + 1;
-        const { width, height } = page.getSize();
-        
-        // Get the invoice for this page to extract website info
-        const pageInvoice = pageToInvoiceMap[index]?.invoice;
-        const website = pageInvoice?.business?.email
-          ? pageInvoice.business.email.split('@')[1]
-          : 'pearlsbymangatrai.com';
-        
-        // Calculate footer position to match CSS footer styling
-        // CSS footer: bottom: '12mm', padding: '6px 0' (6px ≈ 0.15mm ≈ 0.43 points)
-        // A4: 210mm × 297mm = 595.28 × 841.89 points
-        // PDF margin: 3mm top/left/right, 5mm bottom for batch = 8.5 points top, 14.17 points bottom
-        // Invoice padding: 8mm = 22.68 points
-        // CSS footer bottom: 12mm = 34.02 points from bottom of invoice content
-        // Accounting for PDF margin: footer is at 14.17 + 12mm = 14.17 + 34.02 = 48.19 points from bottom of page
-        // Plus half of padding (6px/2 = 3px ≈ 0.22 points) for vertical centering
-        const pdfMarginBottom = 14.17; // 5mm in points (batch mode uses larger bottom margin)
-        const pdfMargin = 8.5; // 3mm in points (for other margins)
-        const footerBottomOffset = 34.02; // 12mm in points (matches CSS bottom: '12mm')
-        const footerPadding = 0.43; // 6px ≈ 0.43 points (half for vertical center)
-        const footerY = pdfMarginBottom + footerBottomOffset + footerPadding; // Position from bottom of page
-        
-        // Calculate text position - match the CSS footer which has "Generated from: website Page X of Y"
-        // The page number should align right after "Generated from: website"
-        const footerText = `Page ${pageNumber} of ${totalPages}`;
-        const fontSize = 6.35; // 9px ≈ 6.35 points (matches CSS fontSize: '9px')
-        const textWidth = helveticaFont.widthOfTextAtSize(footerText, fontSize);
-        
-        // Calculate the width of "Generated from: " + website text
-        const prefixText = `Generated from: ${website} `;
-        const prefixWidth = helveticaFont.widthOfTextAtSize(prefixText, fontSize);
-        
-        // Right-align: width - margin - invoice padding - prefix width - page number width
-        // Match the CSS: right: '8mm' (22.68 points)
-        const invoicePadding = 22.68; // 8mm in points
-        const footerX = width - pdfMargin - invoicePadding - prefixWidth - textWidth; // Positioned after "Generated from: website"
-        
-        // Draw page number text aligned with the footer
-        page.drawText(footerText, {
-          x: footerX,
-          y: footerY,
-          size: fontSize,
-          font: helveticaFont,
-          color: rgb(0, 0, 0), // Black to match CSS color: '#000'
-        });
-      });
 
       const mergedPdfBytes = await pdfDoc.save();
       const firstInvoice = invoices[0] as InvoiceData;

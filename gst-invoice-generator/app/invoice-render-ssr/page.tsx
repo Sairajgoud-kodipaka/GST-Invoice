@@ -78,12 +78,12 @@ export default async function InvoiceRenderSSRPage({ searchParams }: PageProps) 
         }
         
         .invoice-page {
-          /* Account for 3mm margin on each side: 210mm - 6mm = 204mm, 297mm - 6mm = 291mm */
-          width: 204mm !important;
-          min-width: 204mm !important;
-          max-width: 204mm !important;
+          /* Account for 5mm margin on sides: 210mm - 10mm = 200mm, 297mm - 13mm (5mm top + 8mm bottom) = 284mm */
+          width: 200mm !important;
+          min-width: 200mm !important;
+          max-width: 200mm !important;
           height: auto !important;
-          min-height: 291mm !important;
+          min-height: 284mm !important;
           max-height: none !important;
           padding: 8mm !important;
           border: 2.5px solid #000 !important;
@@ -97,7 +97,7 @@ export default async function InvoiceRenderSSRPage({ searchParams }: PageProps) 
         @media print {
           @page {
             size: A4 portrait;
-            margin: 3mm;
+            margin: 5mm 5mm 8mm 5mm; /* top right bottom left - increased bottom margin */
           }
           
           * {
@@ -133,13 +133,13 @@ export default async function InvoiceRenderSSRPage({ searchParams }: PageProps) 
           }
           
           .invoice-page {
-            /* Account for 3mm margin on each side */
-            width: 204mm !important;
-            min-width: 204mm !important;
-            max-width: 204mm !important;
-            height: 291mm !important;
-            min-height: 291mm !important;
-            max-height: 291mm !important;
+            /* Account for 5mm margins on sides, 5mm top, 8mm bottom */
+            width: 200mm !important;
+            min-width: 200mm !important;
+            max-width: 200mm !important;
+            height: 284mm !important;
+            min-height: 284mm !important;
+            max-height: 284mm !important;
             padding: 8mm !important;
             border: 2.5px solid #000 !important;
             box-sizing: border-box !important;
@@ -160,12 +160,12 @@ export default async function InvoiceRenderSSRPage({ searchParams }: PageProps) 
           }
           
           .invoice-page {
-            /* Account for 3mm margin on each side for PDF generation */
-            width: 204mm !important;
-            min-width: 204mm !important;
-            max-width: 204mm !important;
+            /* Account for 5mm margins on sides, 5mm top, 8mm bottom for PDF generation */
+            width: 200mm !important;
+            min-width: 200mm !important;
+            max-width: 200mm !important;
             height: auto !important;
-            min-height: 291mm !important;
+            min-height: 284mm !important;
             max-height: none !important;
             padding: 8mm !important;
             border: 2.5px solid #000 !important;

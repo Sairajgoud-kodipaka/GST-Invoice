@@ -169,6 +169,7 @@ export function mapCSVToInvoice(
   // Map order metadata
   const orderNoCol = findColumn(headers, ['order number', 'order no', 'order id', 'name']);
   const orderDateCol = findColumn(headers, ['order date', 'created at', 'paid at']);
+  const invoiceDateCol = findColumn(headers, ['invoice date', 'invoice created at', 'invoice created']);
   const paymentMethodCol = findColumn(headers, ['payment method', 'payment reference']);
   const transportModeCol = findColumn(headers, ['shipping method', 'transport mode', 'fulfillment status']);
   const financialStatusCol = findColumn(headers, ['financial status', 'payment status', 'status']);
@@ -178,7 +179,10 @@ export function mapCSVToInvoice(
   // Clean order number if it contains customer name/status (e.g., "MN-25-6 ushrama paid" -> "MN-25-6")
   orderNo = extractOrderNumber(orderNo);
   const orderDate = formatDate(getValue(row, orderDateCol));
-  const invoiceDate = formatDate(new Date().toISOString());
+  // Use invoice date from CSV if available, otherwise use order date (not today's date)
+  // Invoice date should reflect when the order was created, not when invoice was generated
+  const invoiceDateFromCSV = getValue(row, invoiceDateCol);
+  const invoiceDate = invoiceDateFromCSV ? formatDate(invoiceDateFromCSV) : (orderDate || formatDate(new Date().toISOString()));
   const paymentMethod = getValue(row, paymentMethodCol) || 'Prepaid';
   const transportMode = getValue(row, transportModeCol) || '';
   

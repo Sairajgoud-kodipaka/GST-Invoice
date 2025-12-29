@@ -131,6 +131,7 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
         const invoicesWithNumbers: InvoiceData[] = [];
         const skippedInvoices: Array<{ invoiceNo: string; reason: string; orderNo: string }> = [];
         const updatedOrders: Array<{ orderNo: string; differences: Array<{ field: string; oldValue: any; newValue: any }> }> = [];
+        const existingInvoices: Array<{ invoiceNo: string; orderNo: string }> = []; // Track invoices that already exist
         
         for (const invoice of rawInvoices) {
           // Use the invoice number that was already set by the field-mapper
@@ -259,17 +260,34 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
           }
           
           // STRICT VALIDATION 2: Check if invoice number already exists (prevent duplicates)
+          // BUT allow reuse if it's for the same order (re-import scenario)
           try {
             const invoiceExistsCheck = await invoiceService.exists(expectedInvoiceNo);
             if (invoiceExistsCheck.exists) {
-              // Invoice number already exists - this is a duplicate, do NOT skip numbers
-              console.log(`Invoice ${expectedInvoiceNo} already exists for order ${invoiceExistsCheck.invoice?.orderNo || 'unknown'}`);
-              skippedInvoices.push({
-                invoiceNo: expectedInvoiceNo,
-                reason: `Invoice ${expectedInvoiceNo} already exists for order ${invoiceExistsCheck.invoice?.orderNo || 'unknown'}. Cannot use duplicate invoice number.`,
-                orderNo: orderNo,
-              });
-              continue;
+              const existingOrderNo = invoiceExistsCheck.invoice?.orderNo;
+              
+              // If invoice exists for the SAME order, we can update it (re-import scenario)
+              if (existingOrderNo === orderNo) {
+                console.log(`Invoice ${expectedInvoiceNo} already exists for order ${orderNo} - will update`);
+                // Track that this invoice already exists - will be updated automatically
+                existingInvoices.push({
+                  invoiceNo: expectedInvoiceNo,
+                  orderNo: orderNo,
+                });
+                // Continue with creation - the API will handle updating
+              } else {
+                // Invoice number exists for a DIFFERENT order - this is a conflict
+                console.log(`Invoice ${expectedInvoiceNo} already exists for order ${existingOrderNo || 'unknown'}, but current order is ${orderNo}`);
+                skippedInvoices.push({
+                  invoiceNo: expectedInvoiceNo,
+                  reason: `Invoice ${expectedInvoiceNo} already exists for order ${existingOrderNo || 'unknown'}. Cannot use duplicate invoice number for different order.`,
+                  orderNo: orderNo,
+                });
+                continue;
+              }
+            } else {
+              // Invoice number doesn't exist - can be created (including reuse of deleted numbers)
+              console.log(`Invoice ${expectedInvoiceNo} is available for order ${orderNo} (may be reusing deleted number)`);
             }
           } catch (error) {
             // Network or service error - log but continue (don't block import)
@@ -333,8 +351,17 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
             );
             
             if (createResult.success && createResult.invoice) {
-              // Successfully created with the expected invoice number
-              console.log(`Successfully created invoice ${expectedInvoiceNo} for order ${orderNo}`);
+              // Check if this was an update or new creation
+              const wasUpdated = (createResult as any).updated === true;
+              
+              if (wasUpdated) {
+                // Invoice was updated (already existed)
+                console.log(`Successfully updated existing invoice ${expectedInvoiceNo} for order ${orderNo}`);
+              } else {
+                // Successfully created new invoice
+                console.log(`Successfully created invoice ${expectedInvoiceNo} for order ${orderNo}`);
+              }
+              
               invoice.metadata.invoiceNo = expectedInvoiceNo;
               // Store invoice ID in metadata for linking to order
               (invoice.metadata as any).invoiceId = createResult.invoice.id;
@@ -442,6 +469,20 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
             title: `${updatedOrders.length} order(s) updated`,
             description: `The following orders were updated with new data:\n\n${updateDetails}${moreCount}\n\nOrders and invoices have been updated in the database.`,
             duration: 20000, // Show for 20 seconds
+          });
+        }
+
+        // Show message for existing invoices that were updated
+        if (existingInvoices.length > 0) {
+          const existingDetails = existingInvoices.slice(0, 5).map(e => 
+            `Invoice ${e.invoiceNo} (Order ${e.orderNo})`
+          ).join('\n');
+          const moreExisting = existingInvoices.length > 5 ? `\n... and ${existingInvoices.length - 5} more` : '';
+          
+          toast({
+            title: `${existingInvoices.length} invoice(s) already existed`,
+            description: `The following invoices already exist and were automatically updated:\n\n${existingDetails}${moreExisting}\n\nCannot create new invoices with the same numbers. Existing invoices have been updated with the latest data.`,
+            duration: 15000, // Show for 15 seconds
           });
         }
 
