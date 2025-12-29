@@ -108,21 +108,21 @@ async function generateSinglePDF(
     }
     
     // Set HTML directly - much faster and avoids auth issues
+    // ✅ Optimized: Use 'domcontentloaded' instead of 'networkidle0' for faster rendering
     console.log('📄 Setting invoice HTML directly in page...');
     await page.setContent(html, {
-      waitUntil: 'networkidle0',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded', // Faster than 'networkidle0'
+      timeout: 15000, // Reduced from 30000ms to 15000ms
     });
     console.log('✅ Invoice HTML set successfully');
     
-    // ✅ Wait a bit for page to stabilize
+    // ✅ Optimized wait for page to stabilize (reduced from 1000ms to 300ms)
     console.log('⏳ Waiting for page to stabilize...');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Wait for React hydration by checking for Next.js hydration markers
-    // and waiting for the invoice element to appear
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // ✅ Optimized: Wait for invoice element with shorter timeout (reduced from 10s to 3s max)
     let attempts = 0;
-    const maxAttempts = 20; // 20 attempts * 500ms = 10 seconds max
+    const maxAttempts = 6; // 6 attempts * 500ms = 3 seconds max (reduced from 20)
     let elementFound = false;
     
     while (attempts < maxAttempts && !elementFound) {
@@ -143,8 +143,8 @@ async function generateSinglePDF(
         break;
       }
       
-      // Check for errors on the page
-      if (attempts % 4 === 0) { // Every 2 seconds
+      // Check for errors on the page (every 2 attempts = 1 second)
+      if (attempts % 2 === 0) {
         const hasError = await page.evaluate(() => {
           const errorElements = document.querySelectorAll('[class*="error"], [class*="Error"]');
           const bodyText = document.body.textContent || '';
@@ -159,47 +159,37 @@ async function generateSinglePDF(
       }
     }
     
+    // ✅ Optimized: If not found, try waitForSelector with shorter timeout (reduced from 5s to 2s)
     if (!elementFound) {
-      console.log('⚠️ Invoice element not found after waiting, checking page state...');
-    }
-    
-    // ✅ Check for invoice element (if not already found during hydration wait)
-    if (!elementFound) {
-      console.log('⏳ Invoice element not found during hydration, checking selectors...');
+      console.log('⏳ Invoice element not found during initial wait, checking selectors...');
       
-      const selectorTimeout = 5000; // 5 seconds
+      const selectorTimeout = 2000; // Reduced from 5000ms to 2000ms
       
-      // Strategy: Wait for element to exist in DOM (for PDF, we don't need it visible in viewport)
-      const checkSelector = async (selector: string, timeout: number): Promise<boolean> => {
-        try {
-          // Wait for element to exist in DOM (no visibility requirement - PDF doesn't need viewport visibility)
-          await page.waitForSelector(selector, {
-            timeout: timeout,
-          });
-          // Verify it has content (basic sanity check)
-          const hasContent = await page.evaluate((sel: string) => {
-            const el = document.querySelector(sel);
-            return el !== null && el.textContent && el.textContent.trim().length > 10;
-          }, selector);
-          return hasContent;
-        } catch {
-          return false;
+      try {
+        // Try .invoice-page first
+        await page.waitForSelector('.invoice-page', { timeout: selectorTimeout });
+        const hasContent = await page.evaluate(() => {
+          const el = document.querySelector('.invoice-page');
+          return el !== null && el.textContent && el.textContent.trim().length > 10;
+        });
+        if (hasContent) {
+          elementFound = true;
+          console.log('✅ Invoice element (.invoice-page) found');
         }
-      };
-      
-      // Try .invoice-page first (preferred selector)
-      console.log(`⏳ Checking for .invoice-page...`);
-      elementFound = await checkSelector('.invoice-page', selectorTimeout);
-      
-      if (elementFound) {
-        console.log('✅ Invoice element (.invoice-page) found');
-      } else {
+      } catch {
         // Fallback: try .invoice-template
-        console.log('⚠️ .invoice-page not found, trying .invoice-template...');
-        elementFound = await checkSelector('.invoice-template', selectorTimeout);
-        
-        if (elementFound) {
-          console.log('✅ Invoice element (.invoice-template) found');
+        try {
+          await page.waitForSelector('.invoice-template', { timeout: selectorTimeout });
+          const hasContent = await page.evaluate(() => {
+            const el = document.querySelector('.invoice-template');
+            return el !== null && el.textContent && el.textContent.trim().length > 10;
+          });
+          if (hasContent) {
+            elementFound = true;
+            console.log('✅ Invoice element (.invoice-template) found');
+          }
+        } catch {
+          // Element not found
         }
       }
     }
@@ -221,8 +211,8 @@ async function generateSinglePDF(
       throw new Error(`Invoice element not found. Tried .invoice-page and .invoice-template. Page may not have rendered correctly.`);
     }
     
-    // ✅ Small additional wait to ensure rendering is complete
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // ✅ Reduced additional wait (from 500ms to 200ms)
+    await new Promise(resolve => setTimeout(resolve, 200));
     
     console.log('📄 Generating PDF...');
     
@@ -266,6 +256,18 @@ export async function POST(request: NextRequest) {
     if (invoices.length === 0) {
       return NextResponse.json(
         { error: 'Invalid request: at least one invoice is required' },
+        { status: 400 }
+      );
+    }
+
+    // ✅ Safety check: Limit batch size to prevent timeouts
+    const MAX_BATCH_SIZE = 50; // Maximum invoices per batch
+    if (invoices.length > MAX_BATCH_SIZE) {
+      return NextResponse.json(
+        { 
+          error: `Too many invoices. Maximum ${MAX_BATCH_SIZE} invoices per batch. Please select fewer invoices.`,
+          maxBatchSize: MAX_BATCH_SIZE
+        },
         { status: 400 }
       );
     }

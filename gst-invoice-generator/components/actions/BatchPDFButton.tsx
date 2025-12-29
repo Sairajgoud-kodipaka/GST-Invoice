@@ -69,8 +69,10 @@ export function BatchPDFButton({
             // Add helpful context for common errors
             if (errorMessage.includes('Vercel Deployment Protection')) {
               errorMessage = 'PDF generation is temporarily unavailable. Please contact support or try again later.';
-            } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
-              errorMessage = 'PDF generation timed out. The batch may be too large. Please try fewer invoices or try again.';
+            } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout') || response.status === 504) {
+              errorMessage = `PDF generation timed out. ${invoices.length > 10 ? 'Try generating fewer invoices at once (10 or less).' : 'The batch may be too large. Please try fewer invoices or try again.'}`;
+            } else if (response.status === 504) {
+              errorMessage = `PDF generation timed out. ${invoices.length > 10 ? 'Try generating fewer invoices at once (10 or less).' : 'Please try again with fewer invoices.'}`;
             }
           } else {
             const errorText = await response.text();
