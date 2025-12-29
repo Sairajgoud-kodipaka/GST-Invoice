@@ -47,6 +47,23 @@ import Link from 'next/link';
 
 type StatusFilter = 'all' | 'pending' | 'has-invoice';
 
+// Type-safe helper to validate InvoiceData structure
+function validateInvoiceData(invoiceData: InvoiceData | undefined): string[] {
+  const missingFields: string[] = [];
+  if (!invoiceData) {
+    return ['invoiceData'];
+  }
+  if (!invoiceData.business) missingFields.push('business');
+  if (!invoiceData.billToParty) missingFields.push('billToParty');
+  if (!invoiceData.shipToParty) missingFields.push('shipToParty');
+  if (!invoiceData.lineItems || !Array.isArray(invoiceData.lineItems) || invoiceData.lineItems.length === 0) {
+    missingFields.push('lineItems');
+  }
+  if (!invoiceData.taxSummary) missingFields.push('taxSummary');
+  if (!invoiceData.metadata) missingFields.push('metadata');
+  return missingFields;
+}
+
 interface EditInvoiceFormProps {
   order: Order;
   onSave: (invoiceData: InvoiceData) => void;
@@ -752,16 +769,7 @@ function OrdersContent() {
       }
 
       // Validate invoiceData structure - fail fast if incomplete
-      if (!order.invoiceData || !order.invoiceData.metadata) {
-        throw new Error(
-          `Order ${order.orderNumber} has incomplete invoice data. ` +
-          `Missing required fields. Please re-import this order from CSV.`
-        );
-      }
-
-      // Validate required InvoiceData structure
-      const requiredFields = ['business', 'billToParty', 'shipToParty', 'lineItems', 'taxSummary'];
-      const missingFields = requiredFields.filter(field => !order.invoiceData[field]);
+      const missingFields = validateInvoiceData(order.invoiceData);
       
       if (missingFields.length > 0) {
         throw new Error(
@@ -880,22 +888,12 @@ function OrdersContent() {
         }
 
         // Validate invoiceData structure - fail fast if incomplete
-        if (!order.invoiceData || !order.invoiceData.metadata) {
-          throw new Error(
-            `Order ${order.orderNumber} has incomplete invoice data. ` +
-            `Missing required fields. Please re-import this order from CSV.`
-          );
-        }
-
-        // Validate required InvoiceData structure
-        const requiredFields = ['business', 'billToParty', 'shipToParty', 'lineItems', 'taxSummary'];
-        const missingFields = requiredFields.filter(field => !order.invoiceData[field]);
+        const missingFields = validateInvoiceData(order.invoiceData);
         
         if (missingFields.length > 0) {
-          throw new Error(
-            `Order ${order.orderNumber} has incomplete invoice data. ` +
-            `Missing: ${missingFields.join(', ')}. Please re-import this order from CSV.`
-          );
+          console.error(`Order ${order.orderNumber} has incomplete invoice data. Missing: ${missingFields.join(', ')}`);
+          // Skip this order and continue with others
+          continue;
         }
 
         // Create new invoice
