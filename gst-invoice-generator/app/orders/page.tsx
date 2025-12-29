@@ -47,23 +47,6 @@ import Link from 'next/link';
 
 type StatusFilter = 'all' | 'pending' | 'has-invoice';
 
-// Type-safe helper to validate InvoiceData structure
-function validateInvoiceData(invoiceData: InvoiceData | undefined): string[] {
-  const missingFields: string[] = [];
-  if (!invoiceData) {
-    return ['invoiceData'];
-  }
-  if (!invoiceData.business) missingFields.push('business');
-  if (!invoiceData.billToParty) missingFields.push('billToParty');
-  if (!invoiceData.shipToParty) missingFields.push('shipToParty');
-  if (!invoiceData.lineItems || !Array.isArray(invoiceData.lineItems) || invoiceData.lineItems.length === 0) {
-    missingFields.push('lineItems');
-  }
-  if (!invoiceData.taxSummary) missingFields.push('taxSummary');
-  if (!invoiceData.metadata) missingFields.push('metadata');
-  return missingFields;
-}
-
 interface EditInvoiceFormProps {
   order: Order;
   onSave: (invoiceData: InvoiceData) => void;
@@ -733,8 +716,14 @@ function OrdersContent() {
     if (isGeneratingInvoice === order.id) return; // Prevent duplicate clicks
     setIsGeneratingInvoice(order.id);
     try {
+      // Validate order data first
+      if (!order || !order.id || !order.orderNumber) {
+        throw new Error('Invalid order data. Please refresh the page and try again.');
+      }
+
       // If invoice already exists, update it instead of creating duplicate
       if (order.hasInvoice && order.invoiceId) {
+        try {
         const allInvoices = await SupabaseService.getInvoices();
         const existingInvoice = allInvoices.find(inv => inv.id === order.invoiceId);
         if (existingInvoice) {
@@ -766,10 +755,33 @@ function OrdersContent() {
           setOrders(updatedOrders);
           return;
         }
+        } catch (updateError) {
+          console.error('Error updating existing invoice:', updateError);
+          throw new Error(
+            updateError instanceof Error 
+              ? updateError.message 
+              : 'Failed to update invoice. Please try again.'
+          );
+        }
       }
 
       // Validate invoiceData structure - fail fast if incomplete
-      const missingFields = validateInvoiceData(order.invoiceData);
+      if (!order.invoiceData || !order.invoiceData.metadata) {
+        throw new Error(
+          `Order ${order.orderNumber} has incomplete invoice data. ` +
+          `Missing required fields. Please re-import this order from CSV.`
+        );
+      }
+
+      // Validate required InvoiceData structure
+      const missingFields: string[] = [];
+      if (!order.invoiceData.business) missingFields.push('business');
+      if (!order.invoiceData.billToParty) missingFields.push('billToParty');
+      if (!order.invoiceData.shipToParty) missingFields.push('shipToParty');
+      if (!order.invoiceData.lineItems || !Array.isArray(order.invoiceData.lineItems) || order.invoiceData.lineItems.length === 0) {
+        missingFields.push('lineItems');
+      }
+      if (!order.invoiceData.taxSummary) missingFields.push('taxSummary');
       
       if (missingFields.length > 0) {
         throw new Error(
@@ -778,36 +790,123 @@ function OrdersContent() {
         );
       }
 
+      // Validate metadata fields
+      if (!order.invoiceData.metadata.invoiceNo || !order.invoiceData.metadata.orderNo || !order.invoiceData.metadata.invoiceDate) {
+        throw new Error(
+          `Order ${order.orderNumber} has incomplete invoice metadata. ` +
+          `Missing invoice number, order number, or invoice date. Please re-import this order from CSV.`
+        );
+      }
+
       // Create new invoice via API
-      const invoice = await SupabaseService.createInvoice(order.invoiceData);
-      await SupabaseService.updateOrder(order.id, {
-        hasInvoice: true,
-        invoiceId: invoice.id,
-      });
-      const updatedOrders = await SupabaseService.getOrders();
-      setOrders(updatedOrders);
-      toast({
-        title: 'Success',
-        description: `Invoice ${invoice.invoiceNumber} generated successfully`,
-      });
-      
-      // Automatically navigate to invoices page with the new invoice
-      if (navigateToInvoice) {
+      try {
+        const invoice = await SupabaseService.createInvoice(order.invoiceData);
+        
+        // Update order to mark it as having an invoice
         try {
-          await router.push(`/invoices?invoiceId=${invoice.id}`);
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          toast({
-            title: 'Warning',
-            description: 'Invoice generated but navigation failed. Please refresh the page.',
-            variant: 'destructive',
+          await SupabaseService.updateOrder(order.id, {
+            hasInvoice: true,
+            invoiceId: invoice.id,
           });
+        } catch (updateError) {
+          console.warn('Failed to update order after invoice creation:', updateError);
+          // Don't fail the whole operation if order update fails
         }
+        
+        const updatedOrders = await SupabaseService.getOrders();
+        setOrders(updatedOrders);
+        toast({
+          title: 'Success',
+          description: `Invoice ${invoice.invoiceNumber} generated successfully`,
+        });
+        
+        // Automatically navigate to invoices page with the new invoice
+        if (navigateToInvoice) {
+          try {
+            await router.push(`/invoices?invoiceId=${invoice.id}`);
+          } catch (navError) {
+            console.error('Navigation error:', navError);
+            toast({
+              title: 'Warning',
+              description: 'Invoice generated but navigation failed. Please refresh the page.',
+              variant: 'destructive',
+            });
+          }
+        }
+      } catch (createError: any) {
+        // Handle 409 Conflict - invoice number or order already has invoice
+        const customError = createError as any;
+        if (createError instanceof Error && (createError.message.includes('already exists') || customError.status === 409)) {
+          // Try to find the existing invoice
+          const expectedInvoiceNo = order.invoiceData.metadata.invoiceNo;
+          let existingInvoice: Invoice | null = null;
+          
+          // First, try to get invoice info from error response
+          if (customError.existingInvoice && customError.existingInvoice.invoiceNo) {
+            existingInvoice = await SupabaseService.getInvoiceByInvoiceNumber(customError.existingInvoice.invoiceNo);
+          }
+          
+          // If not found, check by invoice number from order
+          if (!existingInvoice && expectedInvoiceNo) {
+            existingInvoice = await SupabaseService.getInvoiceByInvoiceNumber(expectedInvoiceNo);
+          }
+          
+          // If still not found, check by order number
+          if (!existingInvoice) {
+            existingInvoice = await SupabaseService.getInvoiceByOrderNumber(order.orderNumber);
+          }
+          
+          if (existingInvoice) {
+            // Link the existing invoice to this order
+            try {
+              await SupabaseService.updateOrder(order.id, {
+                hasInvoice: true,
+                invoiceId: existingInvoice.id,
+              });
+              
+              const updatedOrders = await SupabaseService.getOrders();
+              setOrders(updatedOrders);
+              
+              toast({
+                title: 'Invoice Linked',
+                description: `Order ${order.orderNumber} is now linked to existing invoice ${existingInvoice.invoiceNumber}`,
+              });
+              
+              // Navigate to the existing invoice
+              if (navigateToInvoice) {
+                try {
+                  await router.push(`/invoices?invoiceId=${existingInvoice.id}`);
+                } catch (navError) {
+                  console.error('Navigation error:', navError);
+                }
+              }
+              return; // Successfully linked, exit function
+            } catch (linkError) {
+              console.error('Error linking invoice to order:', linkError);
+              throw new Error(
+                `Invoice ${existingInvoice.invoiceNumber} already exists but failed to link to order. ` +
+                `Please check the invoices page and link manually.`
+              );
+            }
+          } else {
+            // Invoice number exists but we can't find it - this shouldn't happen
+            const invoiceNoMsg = expectedInvoiceNo ? `Invoice number ${expectedInvoiceNo}` : 'An invoice';
+            throw new Error(
+              `${invoiceNoMsg} already exists in the database, but could not be retrieved. ` +
+              `Please check the invoices page or try again.`
+            );
+          }
+        }
+        throw createError;
       }
     } catch (error) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to generate invoice. Please check your connection and try again.';
+      
       toast({
         title: 'Error',
-        description: 'Failed to generate invoice',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -888,7 +987,21 @@ function OrdersContent() {
         }
 
         // Validate invoiceData structure - fail fast if incomplete
-        const missingFields = validateInvoiceData(order.invoiceData);
+        if (!order.invoiceData || !order.invoiceData.metadata) {
+          console.error(`Order ${order.orderNumber} has incomplete invoice data`);
+          // Skip this order and continue with others
+          continue;
+        }
+
+        // Validate required InvoiceData structure
+        const missingFields: string[] = [];
+        if (!order.invoiceData.business) missingFields.push('business');
+        if (!order.invoiceData.billToParty) missingFields.push('billToParty');
+        if (!order.invoiceData.shipToParty) missingFields.push('shipToParty');
+        if (!order.invoiceData.lineItems || !Array.isArray(order.invoiceData.lineItems) || order.invoiceData.lineItems.length === 0) {
+          missingFields.push('lineItems');
+        }
+        if (!order.invoiceData.taxSummary) missingFields.push('taxSummary');
         
         if (missingFields.length > 0) {
           console.error(`Order ${order.orderNumber} has incomplete invoice data. Missing: ${missingFields.join(', ')}`);

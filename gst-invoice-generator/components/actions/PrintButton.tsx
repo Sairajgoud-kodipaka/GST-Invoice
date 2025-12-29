@@ -14,17 +14,35 @@ export function PrintButton({ invoice }: PrintButtonProps) {
   const printContentRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = () => {
-    if (!printContentRef.current) return;
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      // Fallback: use browser print
-      window.print();
+    // Validate invoice data
+    if (!invoice || !invoice.metadata || !invoice.metadata.invoiceNo) {
+      alert('Invoice data is incomplete. Cannot print invoice.');
       return;
     }
 
-    // Get the invoice HTML content
-    const invoiceHTML = printContentRef.current.innerHTML;
+    if (!printContentRef.current) {
+      alert('Invoice content not available. Please refresh the page and try again.');
+      return;
+    }
+
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        // Popup blocked - try fallback
+        alert('Popup blocked. Please allow popups for this site and try again, or use the browser print function (Ctrl+P / Cmd+P).');
+        // Fallback: use browser print on current page
+        window.print();
+        return;
+      }
+
+      // Get the invoice HTML content
+      const invoiceHTML = printContentRef.current.innerHTML;
+      
+      if (!invoiceHTML || invoiceHTML.trim().length === 0) {
+        printWindow.close();
+        alert('Invoice content is empty. Please refresh the page and try again.');
+        return;
+      }
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -132,8 +150,33 @@ export function PrintButton({ invoice }: PrintButtonProps) {
 </html>
     `;
 
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      
+      // Wait for content to load before printing
+      printWindow.onload = () => {
+        try {
+          printWindow.print();
+        } catch (printError) {
+          console.error('Print error:', printError);
+          alert('Failed to open print dialog. Please try using the browser print function (Ctrl+P / Cmd+P).');
+        }
+      };
+      
+      // Fallback timeout in case onload doesn't fire
+      setTimeout(() => {
+        try {
+          if (printWindow && !printWindow.closed) {
+            printWindow.print();
+          }
+        } catch (printError) {
+          console.error('Print error (timeout):', printError);
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('Print setup error:', error);
+      alert('Failed to prepare invoice for printing. Please try again or use the browser print function (Ctrl+P / Cmd+P).');
+    }
   };
 
   return (

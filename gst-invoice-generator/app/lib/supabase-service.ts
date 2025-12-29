@@ -109,7 +109,14 @@ export class SupabaseService {
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Failed to create invoice');
+      // Create a custom error that includes the existing invoice info for 409 conflicts
+      const errorObj = new Error(error.error || 'Failed to create invoice');
+      if (response.status === 409 && error.existingInvoice) {
+        (errorObj as any).status = 409;
+        (errorObj as any).existingInvoice = error.existingInvoice;
+        (errorObj as any).orderExists = error.orderExists || false;
+      }
+      throw errorObj;
     }
     const data = await response.json();
     
@@ -163,6 +170,28 @@ export class SupabaseService {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to delete invoices');
+    }
+  }
+
+  // Get invoice by invoice number
+  static async getInvoiceByInvoiceNumber(invoiceNo: string): Promise<Invoice | null> {
+    try {
+      const invoices = await this.getInvoices();
+      return invoices.find(inv => inv.invoiceNumber === invoiceNo) || null;
+    } catch (error) {
+      console.error('Error fetching invoice by invoice number:', error);
+      return null;
+    }
+  }
+
+  // Get invoice by order number
+  static async getInvoiceByOrderNumber(orderNo: string): Promise<Invoice | null> {
+    try {
+      const invoices = await this.getInvoices();
+      return invoices.find(inv => inv.orderNumber === orderNo) || null;
+    } catch (error) {
+      console.error('Error fetching invoice by order number:', error);
+      return null;
     }
   }
 }

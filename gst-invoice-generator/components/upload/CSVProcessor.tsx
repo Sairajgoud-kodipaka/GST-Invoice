@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import type { ReactElement } from 'react';
 import { parseCSV } from '@/app/lib/csv-parser';
 import { mapCSVToInvoice, mapMultipleOrders } from '@/app/lib/field-mapper';
 import { numberToWords } from '@/app/lib/invoice-formatter';
@@ -15,7 +16,7 @@ interface CSVProcessorProps {
   onError: (error: string) => void;
 }
 
-export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
+export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): ReactElement {
   const [step, setStep] = useState<'upload' | 'processing' | 'complete'>('upload');
   const [csvFiles, setCsvFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState(0);
@@ -153,7 +154,10 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
               }),
             });
             
-            if (orderCheckResponse.ok) {
+            if (!orderCheckResponse.ok) {
+              // Network or server error - log but continue (don't block import)
+              console.warn(`Order check failed for ${orderNo}, continuing with import`);
+            } else {
               const orderCheck = await orderCheckResponse.json();
               
               if (orderCheck.exists) {
@@ -214,8 +218,10 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
                 }
               }
             }
+            }
           } catch (error) {
-            console.error(`Error checking order ${orderNo}:`, error);
+            // Network or parsing error - log but continue (don't block import)
+            console.warn(`Error checking order ${orderNo}, continuing with import:`, error);
             // Continue with normal flow if check fails
           }
           
@@ -227,7 +233,10 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
               body: JSON.stringify({ orderNo }),
             });
             
-            if (orderCheckResponse.ok) {
+            if (!orderCheckResponse.ok) {
+              // Network or server error - log but continue (don't block import)
+              console.warn(`Invoice check failed for order ${orderNo}, continuing with import`);
+            } else {
               const orderCheck = await orderCheckResponse.json();
               if (orderCheck.hasInvoice) {
                 // Order already has an invoice - but we already handled updates above
@@ -244,8 +253,10 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
                 }
               }
             }
+            }
           } catch (error) {
-            console.error(`Error checking order ${orderNo}:`, error);
+            // Network or parsing error - log but continue (don't block import)
+            console.warn(`Error checking invoice for order ${orderNo}, continuing with import:`, error);
             // Continue with normal flow
           }
           
@@ -263,13 +274,10 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
               continue;
             }
           } catch (error) {
-            console.error(`Error checking invoice ${expectedInvoiceNo}:`, error);
-            skippedInvoices.push({
-              invoiceNo: expectedInvoiceNo,
-              reason: `Error checking if invoice exists: ${error instanceof Error ? error.message : 'Unknown error'}`,
-              orderNo: orderNo,
-            });
-            continue;
+            // Network or service error - log but continue (don't block import)
+            // Only skip if it's a critical validation error, not a network issue
+            console.warn(`Error checking invoice ${expectedInvoiceNo}, continuing with import:`, error);
+            // Don't skip on network errors - let the create endpoint handle duplicate detection
           }
           
           // Validate invoice data structure before creating
@@ -291,10 +299,20 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
             continue;
           }
 
-          if (!invoice.taxSummary || invoice.taxSummary.totalAmountAfterTax === undefined) {
+          if (!invoice.taxSummary || invoice.taxSummary.totalAmountAfterTax === undefined || isNaN(invoice.taxSummary.totalAmountAfterTax)) {
             skippedInvoices.push({
               invoiceNo: expectedInvoiceNo,
-              reason: `Invoice data is incomplete. Missing total amount. Please check your CSV file.`,
+              reason: `Invoice data is incomplete. Missing or invalid total amount. Please check your CSV file.`,
+              orderNo: orderNo,
+            });
+            continue;
+          }
+
+          // Validate line items
+          if (!invoice.lineItems || !Array.isArray(invoice.lineItems) || invoice.lineItems.length === 0) {
+            skippedInvoices.push({
+              invoiceNo: expectedInvoiceNo,
+              reason: `Invoice data is incomplete. Missing line items. Please check your CSV file.`,
               orderNo: orderNo,
             });
             continue;
@@ -303,47 +321,57 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
           // Invoice number is available and matches expected mapping - create it
           console.log(`Creating invoice ${expectedInvoiceNo} for order ${orderNo}`);
           
-          const createResult = await invoiceService.create(
-            expectedInvoiceNo,
-            orderNo,
-            invoice.metadata.invoiceDate,
-            {
-              orderDate: invoice.metadata.orderDate,
-              customerName: invoice.billToParty.name,
-              totalAmount: invoice.taxSummary.totalAmountAfterTax,
-              invoiceData: invoice,
-            }
-          );
-          
-          if (createResult.success) {
-            // Successfully created with the expected invoice number
-            console.log(`Successfully created invoice ${expectedInvoiceNo} for order ${orderNo}`);
-            invoice.metadata.invoiceNo = expectedInvoiceNo;
-            invoicesWithNumbers.push(invoice);
-          } else if (createResult.exists) {
-            // Duplicate detected during creation (race condition)
-            console.log(`Invoice creation failed - duplicate detected for order ${orderNo}`);
-            if (createResult.orderExists) {
-              // Order already has an invoice - prevent regeneration
-              skippedInvoices.push({
-                invoiceNo: expectedInvoiceNo,
-                reason: `Order ${orderNo} already has invoice ${createResult.existingInvoice?.invoiceNo || expectedInvoiceNo}. Cannot regenerate invoices.`,
-                orderNo: orderNo,
-              });
+          try {
+            const createResult = await invoiceService.create(
+              expectedInvoiceNo,
+              orderNo,
+              invoice.metadata.invoiceDate,
+              {
+                orderDate: invoice.metadata.orderDate,
+                customerName: invoice.billToParty.name,
+                totalAmount: invoice.taxSummary.totalAmountAfterTax,
+                invoiceData: invoice,
+              }
+            );
+            
+            if (createResult.success) {
+              // Successfully created with the expected invoice number
+              console.log(`Successfully created invoice ${expectedInvoiceNo} for order ${orderNo}`);
+              invoice.metadata.invoiceNo = expectedInvoiceNo;
+              invoicesWithNumbers.push(invoice);
+            } else if (createResult.exists) {
+              // Duplicate detected during creation (race condition)
+              console.log(`Invoice creation failed - duplicate detected for order ${orderNo}`);
+              if (createResult.orderExists) {
+                // Order already has an invoice - prevent regeneration
+                skippedInvoices.push({
+                  invoiceNo: expectedInvoiceNo,
+                  reason: `Order ${orderNo} already has invoice ${createResult.existingInvoice?.invoiceNo || expectedInvoiceNo}. Cannot regenerate invoices.`,
+                  orderNo: orderNo,
+                });
+              } else {
+                // Invoice number taken by different order - duplicate
+                skippedInvoices.push({
+                  invoiceNo: expectedInvoiceNo,
+                  reason: `Invoice ${expectedInvoiceNo} already exists for order ${createResult.existingInvoice?.orderNo || 'unknown'}. Cannot use duplicate invoice number.`,
+                  orderNo: orderNo,
+                });
+              }
             } else {
-              // Invoice number taken by different order - duplicate
+              // Other error
+              console.error(`Failed to create invoice ${expectedInvoiceNo} for order ${orderNo}:`, createResult.error);
               skippedInvoices.push({
                 invoiceNo: expectedInvoiceNo,
-                reason: `Invoice ${expectedInvoiceNo} already exists for order ${createResult.existingInvoice?.orderNo || 'unknown'}. Cannot use duplicate invoice number.`,
+                reason: createResult.error || 'Failed to create invoice. Please try again or check your network connection.',
                 orderNo: orderNo,
               });
             }
-          } else {
-            // Other error
-            console.error(`Failed to create invoice ${expectedInvoiceNo} for order ${orderNo}:`, createResult.error);
+          } catch (createError) {
+            // Network or unexpected error during creation
+            console.error(`Unexpected error creating invoice ${expectedInvoiceNo} for order ${orderNo}:`, createError);
             skippedInvoices.push({
               invoiceNo: expectedInvoiceNo,
-              reason: createResult.error || 'Failed to create invoice',
+              reason: `Failed to create invoice: ${createError instanceof Error ? createError.message : 'Network or server error. Please try again.'}`,
               orderNo: orderNo,
             });
           }

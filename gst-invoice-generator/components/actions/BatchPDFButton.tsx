@@ -34,6 +34,17 @@ export function BatchPDFButton({
       return;
     }
 
+    // Validate all invoices have required data
+    const invalidInvoices = invoices.filter(inv => !inv || !inv.metadata || !inv.metadata.invoiceNo);
+    if (invalidInvoices.length > 0) {
+      toast({
+        title: 'Error',
+        description: `${invalidInvoices.length} invoice(s) have incomplete data. Cannot generate PDFs.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setGenerating(true);
     
     try {
@@ -54,16 +65,40 @@ export function BatchPDFButton({
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
             const errorData = await response.json();
-            errorMessage = errorData.error || errorMessage;
+            errorMessage = errorData.error || errorData.message || errorMessage;
+            // Add helpful context for common errors
+            if (errorMessage.includes('Vercel Deployment Protection')) {
+              errorMessage = 'PDF generation is temporarily unavailable. Please contact support or try again later.';
+            } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+              errorMessage = 'PDF generation timed out. The batch may be too large. Please try fewer invoices or try again.';
+            }
+          } else {
+            const errorText = await response.text();
+            if (errorText) {
+              errorMessage = errorText.substring(0, 200);
+            }
           }
         } catch {
-          // Use default error message
+          errorMessage = `Server error (${response.status}). Please try again.`;
         }
         throw new Error(errorMessage);
       }
 
+      // Validate response content type
+      const contentType = response.headers.get('content-type');
+      const expectedType = mode === 'merged' ? 'application/pdf' : 'application/zip';
+      if (!contentType || !contentType.includes(expectedType)) {
+        throw new Error(`Server returned invalid file type. Expected ${expectedType}. Please try again.`);
+      }
+
       // Download the file
       const blob = await response.blob();
+      
+      // Validate blob size
+      if (blob.size === 0) {
+        throw new Error('Generated file is empty. Please try again.');
+      }
+
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -77,8 +112,16 @@ export function BatchPDFButton({
         link.download = `Invoices-${dateStr}.zip`;
       }
       
+      // Add link to DOM temporarily (required for some browsers)
+      link.style.display = 'none';
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
 
       toast({
         title: 'Success',
@@ -89,9 +132,13 @@ export function BatchPDFButton({
 
     } catch (error) {
       console.error('Batch PDF generation error:', error);
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to generate PDFs. Please check your connection and try again.';
+      
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to generate PDFs. Please try again.',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {

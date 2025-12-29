@@ -23,6 +23,16 @@ export function PDFButton({
   const { toast } = useToast();
 
   const handleDownload = async () => {
+    // Validate invoice data before attempting download
+    if (!invoice || !invoice.metadata || !invoice.metadata.invoiceNo) {
+      toast({
+        title: 'Error',
+        description: 'Invoice data is incomplete. Cannot generate PDF.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setGenerating(true);
     
     try {
@@ -42,16 +52,40 @@ export function PDFButton({
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
             const errorData = await response.json();
-            errorMessage = errorData.error || errorMessage;
+            errorMessage = errorData.error || errorData.message || errorMessage;
+            // Add helpful context for common errors
+            if (errorMessage.includes('Vercel Deployment Protection')) {
+              errorMessage = 'PDF generation is temporarily unavailable. Please contact support or try again later.';
+            } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+              errorMessage = 'PDF generation timed out. The invoice may be too large. Please try again.';
+            }
+          } else {
+            const errorText = await response.text();
+            if (errorText) {
+              errorMessage = errorText.substring(0, 200);
+            }
           }
-        } catch {
-          // Use default error message
+        } catch (parseError) {
+          // Use default error message if parsing fails
+          errorMessage = `Server error (${response.status}). Please try again.`;
         }
         throw new Error(errorMessage);
       }
 
+      // Validate response is actually a PDF
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/pdf')) {
+        throw new Error('Server returned invalid PDF file. Please try again.');
+      }
+
       // Download the PDF
       const blob = await response.blob();
+      
+      // Validate blob size (should be > 0)
+      if (blob.size === 0) {
+        throw new Error('Generated PDF is empty. Please try again.');
+      }
+
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -62,8 +96,16 @@ export function PDFButton({
       const orderNo = sanitizeFilename(invoice.metadata.orderNo || 'order');
       link.download = `Invoice_${invoiceNo}_${orderNo}.pdf`;
       
+      // Add link to DOM temporarily (required for some browsers)
+      link.style.display = 'none';
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
 
       toast({
         title: 'Success',
@@ -72,9 +114,13 @@ export function PDFButton({
 
     } catch (error) {
       console.error('PDF generation error:', error);
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to generate PDF. Please check your connection and try again.';
+      
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
