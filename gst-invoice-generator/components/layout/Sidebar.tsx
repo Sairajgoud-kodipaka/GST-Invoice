@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Home, ShoppingCart, FileText, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { ordersStorage } from '@/app/lib/storage';
+import { SupabaseService } from '@/app/lib/supabase-service';
 
 const navigation = [
   {
@@ -35,10 +35,14 @@ export function Sidebar() {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    const updatePendingCount = () => {
-      const orders = ordersStorage.getAll();
-      const pending = orders.filter((o) => !o.hasInvoice).length;
-      setPendingCount(pending);
+    const updatePendingCount = async () => {
+      try {
+        const orders = await SupabaseService.getOrders();
+        const pending = orders.filter((o) => !o.hasInvoice).length;
+        setPendingCount(pending);
+      } catch (error) {
+        console.error('Error loading pending orders count:', error);
+      }
     };
 
     updatePendingCount();

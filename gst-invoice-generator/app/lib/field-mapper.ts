@@ -18,10 +18,13 @@ const DEFAULT_BUSINESS: BusinessDetails = {
 };
 
 // Get business details from settings or use default
+// Note: This function is synchronous for backward compatibility
+// It uses getSync() which reads from localStorage cache
+// The cache is updated when businessSettingsStorage.get() is called (async)
 function getBusinessDetails(): BusinessDetails {
   if (typeof window === 'undefined') return DEFAULT_BUSINESS;
   
-  const saved = businessSettingsStorage.get();
+  const saved = businessSettingsStorage.getSync();
   if (!saved || !saved.name || !saved.gstin) {
     return DEFAULT_BUSINESS;
   }

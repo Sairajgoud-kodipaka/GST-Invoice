@@ -27,9 +27,8 @@ import {
   invoiceSettingsStorage,
   BusinessSettings,
   InvoiceSettings,
-  ordersStorage,
-  invoicesStorage,
 } from '@/app/lib/storage';
+import { SupabaseService } from '@/app/lib/supabase-service';
 import { Download, Trash2, FileText, HelpCircle, Upload } from 'lucide-react';
 import JSZip from 'jszip';
 
@@ -69,9 +68,10 @@ export default function SettingsPage() {
   useEffect(() => {
     // Load saved settings
     const loadSettings = async () => {
-      // Load business settings (localStorage)
-      const savedBusiness = businessSettingsStorage.get();
-      if (savedBusiness) {
+      // Load business settings from Supabase (with localStorage fallback)
+      try {
+        const savedBusiness = await businessSettingsStorage.get();
+        if (savedBusiness) {
         // Ensure all fields are properly set, handling undefined/null values
         setBusinessSettings({
           name: savedBusiness.name || '',
@@ -87,8 +87,32 @@ export default function SettingsPage() {
           pan: savedBusiness.pan || '',
           logoUrl: savedBusiness.logoUrl || '',
         });
-        if (savedBusiness.logoUrl) {
-          setLogoPreview(savedBusiness.logoUrl);
+          if (savedBusiness.logoUrl) {
+            setLogoPreview(savedBusiness.logoUrl);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading business settings:', error);
+        // Fallback to localStorage sync version
+        const savedBusiness = businessSettingsStorage.getSync();
+        if (savedBusiness) {
+          setBusinessSettings({
+            name: savedBusiness.name || '',
+            legalName: savedBusiness.legalName || '',
+            address: savedBusiness.address || '',
+            city: savedBusiness.city || '',
+            state: savedBusiness.state || '',
+            pincode: savedBusiness.pincode || '',
+            email: savedBusiness.email || '',
+            phone: savedBusiness.phone || '',
+            gstin: savedBusiness.gstin || '',
+            cin: savedBusiness.cin || '',
+            pan: savedBusiness.pan || '',
+            logoUrl: savedBusiness.logoUrl || '',
+          });
+          if (savedBusiness.logoUrl) {
+            setLogoPreview(savedBusiness.logoUrl);
+          }
         }
       }
 
@@ -233,11 +257,28 @@ export default function SettingsPage() {
       logoUrl: logoPreview || businessSettings.logoUrl,
     };
 
-    businessSettingsStorage.save(settingsToSave);
-    toast({
-      title: 'Success',
-      description: 'Business settings saved successfully',
-    });
+    try {
+      const success = await businessSettingsStorage.save(settingsToSave);
+      if (success) {
+        toast({
+          title: 'Success',
+          description: 'Business settings saved successfully',
+        });
+      } else {
+        toast({
+          title: 'Warning',
+          description: 'Settings saved locally but failed to sync to server',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error saving business settings:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save business settings',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleLatestInvoiceNumberChange = (value: string) => {
@@ -356,16 +397,17 @@ export default function SettingsPage() {
     }
   };
 
-  const handleExportOrders = () => {
-    const orders = ordersStorage.getAll();
-    if (orders.length === 0) {
-      toast({
-        title: 'No orders',
-        description: 'There are no orders to export',
-        variant: 'destructive',
-      });
-      return;
-    }
+  const handleExportOrders = async () => {
+    try {
+      const orders = await SupabaseService.getOrders();
+      if (orders.length === 0) {
+        toast({
+          title: 'No orders',
+          description: 'There are no orders to export',
+          variant: 'destructive',
+        });
+        return;
+      }
 
     // Convert orders to CSV
     const headers = ['Order Number', 'Order Date', 'Customer Name', 'Total Amount', 'Status', 'Invoice Number'];
@@ -407,15 +449,16 @@ export default function SettingsPage() {
   };
 
   const handleExportInvoices = async () => {
-    const invoices = invoicesStorage.getAll();
-    if (invoices.length === 0) {
-      toast({
-        title: 'No invoices',
-        description: 'There are no invoices to export',
-        variant: 'destructive',
-      });
-      return;
-    }
+    try {
+      const invoices = await SupabaseService.getInvoices();
+      if (invoices.length === 0) {
+        toast({
+          title: 'No invoices',
+          description: 'There are no invoices to export',
+          variant: 'destructive',
+        });
+        return;
+      }
 
     try {
       toast({
@@ -462,13 +505,23 @@ export default function SettingsPage() {
     }
   };
 
-  const handleClearData = (type: 'orders' | 'invoices' | 'all') => {
+  const handleClearData = async (type: 'orders' | 'invoices' | 'all') => {
     try {
       if (type === 'orders' || type === 'all') {
-        (ordersStorage as any).clearAll();
+        // Get all orders and delete them
+        const orders = await SupabaseService.getOrders();
+        if (orders.length > 0) {
+          const orderIds = orders.map(o => o.id);
+          await SupabaseService.deleteOrders(orderIds);
+        }
       }
       if (type === 'invoices' || type === 'all') {
-        (invoicesStorage as any).clearAll();
+        // Get all invoices and delete them
+        const invoices = await SupabaseService.getInvoices();
+        if (invoices.length > 0) {
+          const invoiceIds = invoices.map(i => i.id);
+          await SupabaseService.deleteInvoices(invoiceIds);
+        }
       }
 
       toast({
@@ -476,6 +529,7 @@ export default function SettingsPage() {
         description: `All ${type === 'all' ? 'data' : type} cleared successfully`,
       });
     } catch (error) {
+      console.error('Error clearing data:', error);
       toast({
         title: 'Error',
         description: 'Failed to clear data',

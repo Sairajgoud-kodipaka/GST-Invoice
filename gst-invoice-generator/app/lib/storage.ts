@@ -233,7 +233,41 @@ export interface InvoiceSettings {
 }
 
 export const businessSettingsStorage = {
-  get: (): BusinessSettings | null => {
+  // Get settings from Supabase (async) with localStorage fallback
+  get: async (): Promise<BusinessSettings | null> => {
+    if (typeof window === 'undefined') return null;
+    
+    try {
+      // Try to get from Supabase first
+      const response = await fetch('/api/business-settings');
+      if (response.ok) {
+        const data = await response.json();
+        if (data) {
+          // Also cache in localStorage for offline access
+          try {
+            localStorage.setItem(BUSINESS_SETTINGS_KEY, JSON.stringify(data));
+          } catch (e) {
+            // Ignore localStorage errors
+          }
+          return data;
+        }
+      }
+    } catch (error) {
+      console.warn('Error fetching business settings from Supabase, using localStorage fallback:', error);
+    }
+    
+    // Fallback to localStorage
+    try {
+      const stored = localStorage.getItem(BUSINESS_SETTINGS_KEY);
+      return stored ? JSON.parse(stored) : null;
+    } catch (error) {
+      console.error('Error loading business settings:', error);
+      return null;
+    }
+  },
+
+  // Synchronous get (for backward compatibility) - uses localStorage only
+  getSync: (): BusinessSettings | null => {
     if (typeof window === 'undefined') return null;
     try {
       const stored = localStorage.getItem(BUSINESS_SETTINGS_KEY);
@@ -244,12 +278,41 @@ export const businessSettingsStorage = {
     }
   },
 
-  save: (settings: BusinessSettings): void => {
-    if (typeof window === 'undefined') return;
+  // Save settings to Supabase (async) with localStorage fallback
+  save: async (settings: BusinessSettings): Promise<boolean> => {
+    if (typeof window === 'undefined') return false;
+    
+    try {
+      // Try to save to Supabase first
+      const response = await fetch('/api/business-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Also cache in localStorage for offline access
+        try {
+          localStorage.setItem(BUSINESS_SETTINGS_KEY, JSON.stringify(data.settings || settings));
+        } catch (e) {
+          // Ignore localStorage errors
+        }
+        return true;
+      } else {
+        console.warn('Failed to save business settings to Supabase, using localStorage fallback');
+      }
+    } catch (error) {
+      console.warn('Error saving business settings to Supabase, using localStorage fallback:', error);
+    }
+    
+    // Fallback to localStorage
     try {
       localStorage.setItem(BUSINESS_SETTINGS_KEY, JSON.stringify(settings));
+      return true;
     } catch (error) {
       console.error('Error saving business settings:', error);
+      return false;
     }
   },
 
