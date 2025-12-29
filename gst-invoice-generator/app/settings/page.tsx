@@ -468,46 +468,54 @@ export default function SettingsPage() {
         return;
       }
 
-    try {
-      toast({
-        title: 'Exporting...',
-        description: 'Generating PDFs, please wait',
-      });
+      try {
+        toast({
+          title: 'Exporting...',
+          description: 'Generating PDFs, please wait',
+        });
 
-      // Call API to generate PDFs
-      const response = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoices: invoices.map(inv => inv.invoiceData), single: false }),
-      });
+        // Call API to generate PDFs
+        const response = await fetch('/api/generate-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoices: invoices.map(inv => inv.invoiceData), single: false }),
+        });
 
-      if (!response.ok) {
-        throw new Error('Failed to generate PDFs');
+        if (!response.ok) {
+          throw new Error('Failed to generate PDFs');
+        }
+
+        const zipBlob = await response.blob();
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `invoices_export_${new Date().toISOString().split('T')[0]}.zip`;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up after a short delay to ensure download starts
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 100);
+
+        toast({
+          title: 'Success',
+          description: `${invoices.length} invoice(s) exported successfully`,
+        });
+      } catch (error) {
+        toast({
+          title: 'Export Failed',
+          description: 'Failed to export invoices',
+          variant: 'destructive',
+        });
       }
-
-      const zipBlob = await response.blob();
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `invoices_export_${new Date().toISOString().split('T')[0]}.zip`;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      
-      // Clean up after a short delay to ensure download starts
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }, 100);
-
-      toast({
-        title: 'Success',
-        description: `${invoices.length} invoice(s) exported successfully`,
-      });
     } catch (error) {
+      console.error('Error loading invoices for export:', error);
       toast({
-        title: 'Export Failed',
-        description: 'Failed to export invoices',
+        title: 'Error',
+        description: 'Failed to load invoices',
         variant: 'destructive',
       });
     }
