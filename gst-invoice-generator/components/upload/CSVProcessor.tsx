@@ -218,7 +218,6 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
                 }
               }
             }
-            }
           } catch (error) {
             // Network or parsing error - log but continue (don't block import)
             console.warn(`Error checking order ${orderNo}, continuing with import:`, error);
@@ -252,7 +251,6 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
                 continue;
                 }
               }
-            }
             }
           } catch (error) {
             // Network or parsing error - log but continue (don't block import)
