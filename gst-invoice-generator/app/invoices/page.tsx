@@ -43,28 +43,39 @@ function InvoicesContent() {
   const itemsPerPage = 20;
 
   useEffect(() => {
-    const loadInvoices = () => {
-      // Use local storage consistently (same as dashboard and orders pages)
-      const allInvoices = invoicesStorage.getAll();
-      setInvoices(allInvoices);
-      
-      // Check for invoiceId in URL params after loading
-      const invoiceId = searchParams.get('invoiceId');
-      if (invoiceId) {
-        const invoice = allInvoices.find((inv: Invoice) => inv.id === invoiceId);
-        if (invoice) {
-          setPreviewInvoice(invoice);
-          setIsPreviewOpen(true);
+    const loadInvoices = async () => {
+      try {
+        // Load invoices from Supabase
+        const allInvoices = await SupabaseService.getInvoices();
+        setInvoices(allInvoices);
+        
+        // Check for invoiceId in URL params after loading
+        const invoiceId = searchParams.get('invoiceId');
+        if (invoiceId) {
+          const invoice = allInvoices.find((inv: Invoice) => inv.id === invoiceId);
+          if (invoice) {
+            setPreviewInvoice(invoice);
+            setIsPreviewOpen(true);
+          }
         }
+      } catch (error) {
+        console.error('Error loading invoices:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load invoices',
+          variant: 'destructive',
+        });
       }
     };
 
     loadInvoices();
     
     // Refresh every 5 seconds
-    const interval = setInterval(loadInvoices, 5000);
+    const interval = setInterval(() => {
+      loadInvoices();
+    }, 5000);
     return () => clearInterval(interval);
-  }, [searchParams]);
+  }, [searchParams, toast]);
 
   // Filter invoices based on search
   const filteredInvoices = useMemo(() => {
