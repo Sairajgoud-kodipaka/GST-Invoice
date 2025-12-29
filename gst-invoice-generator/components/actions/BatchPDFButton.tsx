@@ -34,6 +34,17 @@ export function BatchPDFButton({
       return;
     }
 
+    // ✅ Limit batch size to 10 invoices
+    const MAX_BATCH_SIZE = 10;
+    if (invoices.length > MAX_BATCH_SIZE) {
+      toast({
+        title: 'Error',
+        description: `Maximum ${MAX_BATCH_SIZE} invoices per batch. Please select ${MAX_BATCH_SIZE} or fewer invoices.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     // Validate all invoices have required data
     const invalidInvoices = invoices.filter(inv => !inv || !inv.metadata || !inv.metadata.invoiceNo);
     if (invalidInvoices.length > 0) {

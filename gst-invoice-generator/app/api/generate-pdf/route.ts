@@ -261,7 +261,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ Safety check: Limit batch size to prevent timeouts
-    const MAX_BATCH_SIZE = 50; // Maximum invoices per batch
+    const MAX_BATCH_SIZE = 10; // Maximum invoices per batch
     if (invoices.length > MAX_BATCH_SIZE) {
       return NextResponse.json(
         { 

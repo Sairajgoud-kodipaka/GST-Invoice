@@ -46,7 +46,7 @@ function InvoicesContent() {
   const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+  const itemsPerPage = 10; // Show 10 invoices per page
   const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
@@ -129,6 +129,9 @@ function InvoicesContent() {
     }
 
     // Apply date range filter
+    // ✅ If only "from" date is selected: show invoices from that date onwards
+    // ✅ If only "to" date is selected: show invoices up to that date
+    // ✅ If both are selected: show invoices in the date range
     if (dateFrom) {
       const fromDate = new Date(dateFrom);
       fromDate.setHours(0, 0, 0, 0);
@@ -136,7 +139,7 @@ function InvoicesContent() {
         const invoiceDate = parseInvoiceDate(inv.invoiceDate);
         if (!invoiceDate) return false;
         invoiceDate.setHours(0, 0, 0, 0);
-        return invoiceDate >= fromDate;
+        return invoiceDate >= fromDate; // From date onwards
       });
     }
 
@@ -147,7 +150,7 @@ function InvoicesContent() {
         const invoiceDate = parseInvoiceDate(inv.invoiceDate);
         if (!invoiceDate) return false;
         invoiceDate.setHours(23, 59, 59, 999);
-        return invoiceDate <= toDate;
+        return invoiceDate <= toDate; // Up to and including to date
       });
     }
 
