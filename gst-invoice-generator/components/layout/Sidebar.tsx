@@ -2,21 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, ShoppingCart, FileText, Settings } from 'lucide-react';
+import { Home, FileText, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
-import { SupabaseService } from '@/app/lib/supabase-service';
 
 const navigation = [
   {
     name: 'Dashboard',
     href: '/',
     icon: Home,
-  },
-  {
-    name: 'Orders',
-    href: '/orders',
-    icon: ShoppingCart,
   },
   {
     name: 'Invoices',
@@ -32,24 +25,6 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [pendingCount, setPendingCount] = useState(0);
-
-  useEffect(() => {
-    const updatePendingCount = async () => {
-      try {
-        const orders = await SupabaseService.getOrders();
-        const pending = orders.filter((o) => !o.hasInvoice).length;
-        setPendingCount(pending);
-      } catch (error) {
-        console.error('Error loading pending orders count:', error);
-      }
-    };
-
-    updatePendingCount();
-    // Update every 5 seconds
-    const interval = setInterval(updatePendingCount, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <div className="flex h-screen w-64 flex-col border-r bg-background">
@@ -60,7 +35,6 @@ export function Sidebar() {
         {navigation.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
-          const showBadge = item.name === 'Orders' && pendingCount > 0;
 
           return (
             <Link
@@ -75,11 +49,6 @@ export function Sidebar() {
             >
               <Icon className="h-5 w-5" />
               {item.name}
-              {showBadge && (
-                <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-xs text-white">
-                  {pendingCount > 9 ? '9+' : pendingCount}
-                </span>
-              )}
             </Link>
           );
         })}

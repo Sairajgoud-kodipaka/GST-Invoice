@@ -27,9 +27,13 @@ import { InvoicePreview } from '@/components/invoice/InvoicePreview';
 import { Invoice } from '@/app/lib/storage';
 import { SupabaseService } from '@/app/lib/supabase-service';
 import { formatCurrency } from '@/app/lib/invoice-formatter';
-import { FileText, Search, Download, Trash2, Eye, MoreVertical } from 'lucide-react';
+import { FileText, Search, Download, Trash2, Eye, MoreVertical, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { CSVProcessor } from '@/components/upload/CSVProcessor';
+import { InvoiceData } from '@/app/types/invoice';
+import { invoiceDataToOrder } from '@/app/lib/storage';
+import { useCallback } from 'react';
 
 function InvoicesContent() {
   const { toast } = useToast();
@@ -41,6 +45,7 @@ function InvoicesContent() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     const loadInvoices = async () => {
@@ -49,10 +54,20 @@ function InvoicesContent() {
         const allInvoices = await SupabaseService.getInvoices();
         setInvoices(allInvoices);
         
-        // Check for invoiceId in URL params after loading
+        // Check for invoiceId or orderNumber in URL params after loading
         const invoiceId = searchParams.get('invoiceId');
+        const orderNumber = searchParams.get('orderNumber');
+        
         if (invoiceId) {
           const invoice = allInvoices.find((inv: Invoice) => inv.id === invoiceId);
+          if (invoice) {
+            setPreviewInvoice(invoice);
+            setIsPreviewOpen(true);
+          }
+        } else if (orderNumber) {
+          // Filter invoices by order number
+          setSearchQuery(orderNumber);
+          const invoice = allInvoices.find((inv: Invoice) => inv.orderNumber === orderNumber);
           if (invoice) {
             setPreviewInvoice(invoice);
             setIsPreviewOpen(true);
@@ -180,6 +195,45 @@ function InvoicesContent() {
     setIsPreviewOpen(true);
   };
 
+  const handleInvoicesReady = useCallback(
+    async (generatedInvoices: InvoiceData[]) => {
+      try {
+        // Create orders from invoices (invoices are already created during CSV import)
+        const newOrders = generatedInvoices.map(invoiceDataToOrder);
+        await SupabaseService.createOrders(newOrders);
+        
+        // Reload invoices to show the newly created ones
+        const updatedInvoices = await SupabaseService.getInvoices();
+        setInvoices(updatedInvoices);
+        setShowUpload(false);
+        
+        toast({
+          title: 'Success',
+          description: `${generatedInvoices.length} invoice(s) generated and ready!`,
+        });
+      } catch (error) {
+        console.error('Error importing invoices:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to import invoices',
+          variant: 'destructive',
+        });
+      }
+    },
+    [toast]
+  );
+
+  const handleError = useCallback(
+    (errorMessage: string) => {
+      toast({
+        title: 'Import Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    },
+    [toast]
+  );
+
   return (
     <div className="flex-1 p-6 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -195,10 +249,30 @@ function InvoicesContent() {
               )}
             </h1>
             <p className="text-muted-foreground">
-              View, manage, download, and print invoices
+              Import orders, generate invoices, preview, download, and print
             </p>
           </div>
+          <div>
+            <Button onClick={() => setShowUpload(!showUpload)}>
+              <Upload className="h-4 w-4 mr-2" />
+              {showUpload ? 'Hide Import' : 'Import Orders'}
+            </Button>
+          </div>
         </div>
+
+        {/* CSV Upload Section */}
+        {showUpload && (
+          <div className="border rounded-lg p-6 bg-muted/50">
+            <h2 className="text-lg font-semibold mb-4">Import Orders from CSV</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Upload a CSV file to automatically generate invoices. Invoices will be created and ready to preview, download, and print.
+            </p>
+            <CSVProcessor
+              onInvoicesReady={handleInvoicesReady}
+              onError={handleError}
+            />
+          </div>
+        )}
 
         {/* Bulk Actions Bar */}
         {selectedInvoices.size > 0 && (
@@ -254,15 +328,14 @@ function InvoicesContent() {
             <h3 className="text-lg font-semibold mb-2">No invoices yet</h3>
             <p className="text-muted-foreground mb-4">
               {invoices.length === 0
-                ? 'Import orders and generate invoices to get started'
+                ? 'Import orders from CSV to automatically generate invoices'
                 : 'No invoices match your search'}
             </p>
             {invoices.length === 0 && (
-              <Link href="/orders">
-                <Button>
-                  Go to Orders
-                </Button>
-              </Link>
+              <Button onClick={() => setShowUpload(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Import Orders
+              </Button>
             )}
           </div>
         ) : (
@@ -309,13 +382,8 @@ function InvoicesContent() {
                           </button>
                         </TableCell>
                         <TableCell>{invoice.invoiceDate}</TableCell>
-                        <TableCell>
-                          <Link
-                            href={`/orders?orderId=${invoice.orderId}`}
-                            className="hover:underline text-primary"
-                          >
-                            {invoice.orderNumber}
-                          </Link>
+                        <TableCell className="font-medium">
+                          {invoice.orderNumber}
                         </TableCell>
                         <TableCell>{invoice.customerName}</TableCell>
                         <TableCell>{formatCurrency(invoice.amount)}</TableCell>
@@ -410,12 +478,9 @@ function InvoicesContent() {
                 <div className="text-center py-8">
                   <p className="text-red-600 font-semibold mb-2">Invoice data is incomplete</p>
                   <p className="text-muted-foreground mb-4">
-                    This invoice was created with incomplete data. Please go to the Orders page and regenerate this invoice.
+                    This invoice was created with incomplete data. Please delete and re-import the order from CSV.
                   </p>
                   <div className="flex gap-2 justify-center">
-                    <Link href={`/orders?orderNo=${previewInvoice.orderNumber}`}>
-                      <Button>Go to Orders</Button>
-                    </Link>
                     <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
                       Close
                     </Button>

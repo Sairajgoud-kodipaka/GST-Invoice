@@ -332,26 +332,53 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
               }
             );
             
-            if (createResult.success) {
+            if (createResult.success && createResult.invoice) {
               // Successfully created with the expected invoice number
               console.log(`Successfully created invoice ${expectedInvoiceNo} for order ${orderNo}`);
               invoice.metadata.invoiceNo = expectedInvoiceNo;
+              // Store invoice ID in metadata for linking to order
+              (invoice.metadata as any).invoiceId = createResult.invoice.id;
               invoicesWithNumbers.push(invoice);
             } else if (createResult.exists) {
-              // Duplicate detected during creation (race condition)
-              console.log(`Invoice creation failed - duplicate detected for order ${orderNo}`);
-              if (createResult.orderExists) {
-                // Order already has an invoice - prevent regeneration
+              // Invoice already exists - try to link it to the order
+              console.log(`Invoice already exists for order ${orderNo}, attempting to link...`);
+              
+              // Try to get the existing invoice by order number or invoice number
+              try {
+                const existingInvoiceResponse = await fetch('/api/invoices/list');
+                if (existingInvoiceResponse.ok) {
+                  const { invoices } = await existingInvoiceResponse.json();
+                  const existingInvoice = invoices.find((inv: any) => 
+                    inv.orderNumber === orderNo || inv.invoiceNumber === expectedInvoiceNo
+                  );
+                  
+                  if (existingInvoice) {
+                    // Link existing invoice to order
+                    invoice.metadata.invoiceNo = existingInvoice.invoiceNumber;
+                    (invoice.metadata as any).invoiceId = existingInvoice.id;
+                    invoicesWithNumbers.push(invoice);
+                    console.log(`Linked existing invoice ${existingInvoice.invoiceNumber} to order ${orderNo}`);
+                  } else {
+                    // Invoice exists but can't find it - skip
+                    skippedInvoices.push({
+                      invoiceNo: expectedInvoiceNo,
+                      reason: `Invoice ${expectedInvoiceNo} already exists but could not be retrieved.`,
+                      orderNo: orderNo,
+                    });
+                  }
+                } else {
+                  // Can't fetch invoices - skip
+                  skippedInvoices.push({
+                    invoiceNo: expectedInvoiceNo,
+                    reason: `Invoice ${expectedInvoiceNo} already exists but could not be linked.`,
+                    orderNo: orderNo,
+                  });
+                }
+              } catch (linkError) {
+                console.error(`Error linking existing invoice for order ${orderNo}:`, linkError);
                 skippedInvoices.push({
                   invoiceNo: expectedInvoiceNo,
-                  reason: `Order ${orderNo} already has invoice ${createResult.existingInvoice?.invoiceNo || expectedInvoiceNo}. Cannot regenerate invoices.`,
-                  orderNo: orderNo,
-                });
-              } else {
-                // Invoice number taken by different order - duplicate
-                skippedInvoices.push({
-                  invoiceNo: expectedInvoiceNo,
-                  reason: `Invoice ${expectedInvoiceNo} already exists for order ${createResult.existingInvoice?.orderNo || 'unknown'}. Cannot use duplicate invoice number.`,
+                  reason: `Invoice ${expectedInvoiceNo} already exists but could not be linked.`,
                   orderNo: orderNo,
                 });
               }

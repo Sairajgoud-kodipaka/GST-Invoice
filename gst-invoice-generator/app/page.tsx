@@ -167,7 +167,7 @@ export default function Dashboard() {
                   Get Started
                 </Button>
               </Link>
-              <Link href="/orders">
+              <Link href="/invoices">
                 <Button variant="outline">
                   <Plus className="h-4 w-4 mr-2" />
                   Import Orders
@@ -179,14 +179,14 @@ export default function Dashboard() {
           <>
             {/* Statistics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Link href="/orders">
+              <Link href="/invoices">
                 <div className="border rounded-lg p-6 hover:bg-accent/50 transition-colors cursor-pointer">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Total Orders</p>
-                      <p className="text-2xl font-bold mt-1">{totalOrders}</p>
+                      <p className="text-sm font-medium text-muted-foreground">Total Invoices</p>
+                      <p className="text-2xl font-bold mt-1">{totalInvoices}</p>
                     </div>
-                    <ShoppingCart className="h-8 w-8 text-muted-foreground" />
+                    <FileText className="h-8 w-8 text-muted-foreground" />
                   </div>
                 </div>
               </Link>
@@ -195,9 +195,9 @@ export default function Dashboard() {
                 <div className="border rounded-lg p-6 hover:bg-accent/50 transition-colors cursor-pointer">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Total Invoices</p>
-                      <p className="text-2xl font-bold mt-1">{totalInvoices}</p>
-          </div>
+                      <p className="text-sm font-medium text-muted-foreground">Total Orders</p>
+                      <p className="text-2xl font-bold mt-1">{totalOrders}</p>
+                    </div>
                     <FileText className="h-8 w-8 text-muted-foreground" />
                   </div>
                 </div>
@@ -244,7 +244,7 @@ export default function Dashboard() {
 
             {/* Quick Actions */}
             <div className="flex gap-4">
-              <Link href="/orders">
+              <Link href="/invoices">
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   Import Orders
@@ -270,7 +270,7 @@ export default function Dashboard() {
                     {recentOrders.map((order) => (
                       <Link
                         key={order.id}
-                        href={`/orders?orderId=${order.id}`}
+                        href={`/invoices?orderNumber=${order.orderNumber}`}
                         className="flex items-center justify-between p-3 rounded-lg hover:bg-accent/50 transition-colors"
                       >
                         <div>

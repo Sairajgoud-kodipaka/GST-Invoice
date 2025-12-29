@@ -180,13 +180,18 @@ export const invoicesStorage = new Storage<Invoice>(INVOICES_STORAGE_KEY);
 
 // Helper functions
 export function invoiceDataToOrder(invoiceData: InvoiceData): Order {
+  // Check if invoice ID is stored in metadata (from automatic creation during import)
+  const invoiceId = (invoiceData.metadata as any)?.invoiceId;
+  const hasInvoice = !!invoiceId;
+  
   return {
     id: `order-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     orderNumber: invoiceData.metadata.orderNo,
     orderDate: invoiceData.metadata.orderDate,
     customerName: invoiceData.billToParty.name,
     totalAmount: invoiceData.taxSummary.totalAmountAfterTax,
-    hasInvoice: false,
+    hasInvoice,
+    invoiceId,
     invoiceData,
     createdAt: new Date().toISOString(),
   };
