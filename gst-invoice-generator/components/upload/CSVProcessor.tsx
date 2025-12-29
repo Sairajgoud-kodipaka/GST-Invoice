@@ -234,13 +234,13 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
                 // Only skip if we didn't update it
                 const wasUpdated = updatedOrders.some(u => u.orderNo === orderNo);
                 if (!wasUpdated) {
-                  console.log(`Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}`);
-                  skippedInvoices.push({
-                    invoiceNo: expectedInvoiceNo,
-                    reason: `Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}. Cannot regenerate invoices.`,
-                    orderNo: orderNo,
-                  });
-                  continue;
+                console.log(`Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}`);
+                skippedInvoices.push({
+                  invoiceNo: expectedInvoiceNo,
+                  reason: `Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}. Cannot regenerate invoices.`,
+                  orderNo: orderNo,
+                });
+                continue;
                 }
               }
             }
@@ -387,16 +387,16 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
               description = `All ${skippedInvoices.length} order(s) already exist and are identical. No changes detected.\n\nExamples:\n${skippedInvoices.slice(0, 3).map(s => `Order ${s.orderNo}`).join('\n')}${skippedInvoices.length > 3 ? `\n... and ${skippedInvoices.length - 3} more` : ''}`;
             } else {
               // Mix of identical and with invoices
-              const skippedDetails = skippedInvoices.slice(0, 3).map(s => {
+            const skippedDetails = skippedInvoices.slice(0, 3).map(s => {
                 if (s.reason.includes('This order already exists')) {
                   return `Order ${s.orderNo} (identical)`;
                 } else {
-                  const invoiceMatch = s.reason.match(/invoice (O-\/\d+)/);
-                  const existingInvoice = invoiceMatch ? invoiceMatch[1] : 'existing invoice';
-                  return `Order ${s.orderNo} → Invoice ${existingInvoice}`;
+              const invoiceMatch = s.reason.match(/invoice (O-\/\d+)/);
+              const existingInvoice = invoiceMatch ? invoiceMatch[1] : 'existing invoice';
+              return `Order ${s.orderNo} → Invoice ${existingInvoice}`;
                 }
-              }).join('\n');
-              const moreCount = skippedInvoices.length > 3 ? `\n... and ${skippedInvoices.length - 3} more orders` : '';
+            }).join('\n');
+            const moreCount = skippedInvoices.length > 3 ? `\n... and ${skippedInvoices.length - 3} more orders` : '';
               description = `All ${skippedInvoices.length} order(s) already exist.\n\nExamples:\n${skippedDetails}${moreCount}`;
             }
           } else if (allSkipped) {

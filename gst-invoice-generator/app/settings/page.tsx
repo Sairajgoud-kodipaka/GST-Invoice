@@ -221,7 +221,7 @@ export default function SettingsPage() {
     return pan.length === 10 && panRegex.test(pan);
   };
 
-  const handleSaveBusiness = () => {
+  const handleSaveBusiness = async () => {
     // Validation
     if (!businessSettings.name || !businessSettings.legalName || !businessSettings.address ||
         !businessSettings.city || !businessSettings.state || !businessSettings.pincode ||
@@ -409,43 +409,51 @@ export default function SettingsPage() {
         return;
       }
 
-    // Convert orders to CSV
-    const headers = ['Order Number', 'Order Date', 'Customer Name', 'Total Amount', 'Status', 'Invoice Number'];
-    const rows = orders.map(order => [
-      order.orderNumber,
-      order.orderDate,
-      order.customerName,
-      order.totalAmount.toString(),
-      order.hasInvoice ? 'Has Invoice' : 'Pending',
-      order.invoiceId || '',
-    ]);
+      // Convert orders to CSV
+      const headers = ['Order Number', 'Order Date', 'Customer Name', 'Total Amount', 'Status', 'Invoice Number'];
+      const rows = orders.map(order => [
+        order.orderNumber,
+        order.orderDate,
+        order.customerName,
+        order.totalAmount.toString(),
+        order.hasInvoice ? 'Has Invoice' : 'Pending',
+        order.invoiceId || '',
+      ]);
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `orders_export_${new Date().toISOString().split('T')[0]}.csv`;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    
-    // Clean up after a short delay to ensure download starts
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-      if (a.parentNode) {
-        document.body.removeChild(a);
-      }
-    }, 100);
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `orders_export_${new Date().toISOString().split('T')[0]}.csv`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up after a short delay to ensure download starts
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        if (a.parentNode) {
+          document.body.removeChild(a);
+        }
+      }, 100);
 
-    toast({
-      title: 'Success',
-      description: `${orders.length} order(s) exported successfully`,
-    });
+      toast({
+        title: 'Success',
+        description: `${orders.length} order(s) exported successfully`,
+      });
+    } catch (error) {
+      console.error('Error exporting orders:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to export orders',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleExportInvoices = async () => {
