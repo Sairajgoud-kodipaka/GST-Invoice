@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     // First, check if invoice already exists
     const { data: existingInvoice, error: checkError } = await supabase
       .from('invoices')
-      .select('id, invoice_no, order_no, created_at, created_by')
+      .select('id, invoice_no, order_no, order_date, created_at, created_by')
       .eq('invoice_no', invoiceNo)
       .single();
 
@@ -123,6 +123,8 @@ export async function POST(request: NextRequest) {
         
         // Update invoice data metadata with correct invoice date
         invoiceData.metadata.invoiceDate = invoiceDateToUse;
+        
+        const finalInvoiceData = invoiceData;
         
         const { data: updatedInvoice, error: updateError } = await supabase
           .from('invoices')
@@ -187,7 +189,7 @@ export async function POST(request: NextRequest) {
     // Check if an invoice already exists for this order number (prevent regeneration)
     const { data: existingOrderInvoice, error: orderCheckError } = await supabase
       .from('invoices')
-      .select('id, invoice_no, order_no, created_at, created_by')
+      .select('id, invoice_no, order_no, order_date, created_at, created_by')
       .eq('order_no', orderNo)
       .single();
 
@@ -230,6 +232,8 @@ export async function POST(request: NextRequest) {
         
         // Update invoice data metadata with correct invoice date
         invoiceData.metadata.invoiceDate = invoiceDateToUse;
+        
+        const finalInvoiceData = invoiceData;
         
         const { data: updatedInvoice, error: updateError } = await supabase
           .from('invoices')
