@@ -10,13 +10,12 @@ RETURNS TEXT AS $$
 DECLARE
   last_num INT;
   prefix TEXT;
-  last_invoice_no TEXT;
-  max_num INT := 0;
-  invoice_record RECORD;
+  max_num INT;
 BEGIN
   -- Get prefix from invoice_settings
-  SELECT prefix INTO prefix
-  FROM get_invoice_settings()
+  -- Use table alias to avoid ambiguity with variable name
+  SELECT s.prefix INTO prefix
+  FROM get_invoice_settings() s
   LIMIT 1;
   
   -- Default prefix if not found
@@ -24,27 +23,20 @@ BEGIN
     prefix := 'O-/';
   END IF;
   
-  -- Find the highest invoice number by extracting numeric part
-  -- This ensures we get the actual highest number, not just the most recent
-  FOR invoice_record IN
-    SELECT invoice_no
-    FROM invoices
-    WHERE invoice_no LIKE prefix || '%'
-  LOOP
-    -- Extract numeric part from invoice number (e.g., "O-/3628" -> 3628)
-    last_num := CAST(SUBSTRING(invoice_record.invoice_no FROM '(\d+)$') AS INT);
-    
-    -- Track the maximum number found
-    IF last_num IS NOT NULL AND last_num > max_num THEN
-      max_num := last_num;
-      last_invoice_no := invoice_record.invoice_no;
-    END IF;
-  END LOOP;
+  -- Find the highest invoice number by extracting numeric part using SQL aggregation
+  -- IMPORTANT: This finds the MAXIMUM numeric value, NOT the most recent invoice
+  -- This ensures sequential numbering continues from highest number even after deletions
+  -- Example: If you have O-/3578 and delete O-/3579, O-/3580, next will be O-/3579
+  SELECT MAX(CAST(SUBSTRING(invoice_no FROM '(\d+)$') AS INT))
+  INTO max_num
+  FROM invoices
+  WHERE invoice_no LIKE prefix || '%'
+    AND SUBSTRING(invoice_no FROM '(\d+)$') IS NOT NULL;
   
-  -- If no invoices exist, get starting number from settings
-  IF last_invoice_no IS NULL THEN
-    SELECT starting_number INTO last_num
-    FROM get_invoice_settings()
+  -- If no invoices exist or max_num is NULL, get starting number from settings
+  IF max_num IS NULL THEN
+    SELECT s.starting_number INTO last_num
+    FROM get_invoice_settings() s
     LIMIT 1;
     
     -- Default to 1 if no settings

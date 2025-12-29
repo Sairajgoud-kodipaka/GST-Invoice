@@ -136,8 +136,9 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
         for (const invoice of rawInvoices) {
           const orderNo = invoice.metadata.orderNo;
           
-          // Initialize invoice number - will be set based on order status
-          let expectedInvoiceNo = invoice.metadata.invoiceNo;
+          // Initialize invoice number - will be set from database (sequential)
+          // Clear any invoice number set by field-mapper (it uses localStorage which is wrong)
+          let expectedInvoiceNo: string | undefined = undefined;
           
           console.log(`Processing order ${orderNo}`);
           
@@ -165,8 +166,12 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
                 if (orderCheck.isIdentical) {
                   // Order exists and is exactly the same - skip with message
                   console.log(`Order ${orderNo} already exists and is identical`);
+                  // Use existing invoice number if available, otherwise use placeholder
+                  const invoiceNoToUse = orderCheck.existingOrder?.invoiceId 
+                    ? (orderCheck.existingOrder.orderData?.metadata?.invoiceNo || 'N/A')
+                    : 'N/A';
                   skippedInvoices.push({
-                    invoiceNo: expectedInvoiceNo,
+                    invoiceNo: invoiceNoToUse,
                     reason: `This order already exists. Order ${orderNo} has not changed.`,
                     orderNo: orderNo,
                   });
@@ -262,12 +267,12 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
             // Continue with normal flow
           }
           
-          // Assign sequential invoice number if not already assigned
-          // This ensures new invoices get sequential numbers regardless of order numbers
-          if (!expectedInvoiceNo) {
-            expectedInvoiceNo = await invoiceService.getNext();
-            invoice.metadata.invoiceNo = expectedInvoiceNo;
-          }
+          // ALWAYS assign sequential invoice number from Supabase database
+          // This ensures sequential numbering continues from the highest existing number
+          // Field-mapper doesn't assign numbers (uses empty placeholder) - we handle it here via Supabase API
+          expectedInvoiceNo = await invoiceService.getNext();
+          invoice.metadata.invoiceNo = expectedInvoiceNo;
+          console.log(`Assigned sequential invoice number: ${expectedInvoiceNo} for order ${orderNo}`);
           
           // STRICT VALIDATION 2: Check if invoice number already exists (prevent duplicates)
           // BUT allow reuse if it's for the same order (re-import scenario)
