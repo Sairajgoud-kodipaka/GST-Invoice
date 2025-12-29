@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       let invoiceId = order.invoiceId || null;
       
       // If order doesn't have invoice ID but has invoice number in metadata, check if invoice exists
-      if (!invoiceId && order.invoiceData?.metadata?.invoiceNo) {
+      if (!invoiceId && order.invoiceData?.metadata?.invoiceNo && supabase) {
         try {
           const { data: existingInvoice } = await supabase
             .from('invoices')
