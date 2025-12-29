@@ -272,26 +272,45 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
             continue;
           }
           
+          // Validate invoice data structure before creating
+          if (!invoice.metadata || !invoice.metadata.invoiceDate) {
+            skippedInvoices.push({
+              invoiceNo: expectedInvoiceNo,
+              reason: `Invoice data is incomplete. Missing invoiceDate in metadata. Please check your CSV file.`,
+              orderNo: orderNo,
+            });
+            continue;
+          }
+
+          if (!invoice.billToParty || !invoice.billToParty.name) {
+            skippedInvoices.push({
+              invoiceNo: expectedInvoiceNo,
+              reason: `Invoice data is incomplete. Missing customer/billing name. Please check your CSV file.`,
+              orderNo: orderNo,
+            });
+            continue;
+          }
+
+          if (!invoice.taxSummary || invoice.taxSummary.totalAmountAfterTax === undefined) {
+            skippedInvoices.push({
+              invoiceNo: expectedInvoiceNo,
+              reason: `Invoice data is incomplete. Missing total amount. Please check your CSV file.`,
+              orderNo: orderNo,
+            });
+            continue;
+          }
+
           // Invoice number is available and matches expected mapping - create it
           console.log(`Creating invoice ${expectedInvoiceNo} for order ${orderNo}`);
-          
-          // Ensure invoiceDate is set (fallback to current date if missing)
-          const invoiceDate = invoice.metadata?.invoiceDate || (() => {
-            const now = new Date();
-            const day = String(now.getDate()).padStart(2, '0');
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const year = now.getFullYear();
-            return `${day}-${month}-${year}`;
-          })();
           
           const createResult = await invoiceService.create(
             expectedInvoiceNo,
             orderNo,
-            invoiceDate,
+            invoice.metadata.invoiceDate,
             {
-              orderDate: invoice.metadata?.orderDate,
-              customerName: invoice.billToParty?.name,
-              totalAmount: invoice.taxSummary?.totalAmountAfterTax,
+              orderDate: invoice.metadata.orderDate,
+              customerName: invoice.billToParty.name,
+              totalAmount: invoice.taxSummary.totalAmountAfterTax,
               invoiceData: invoice,
             }
           );

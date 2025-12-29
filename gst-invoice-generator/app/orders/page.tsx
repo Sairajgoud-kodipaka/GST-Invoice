@@ -751,6 +751,25 @@ function OrdersContent() {
         }
       }
 
+      // Validate invoiceData structure - fail fast if incomplete
+      if (!order.invoiceData || !order.invoiceData.metadata) {
+        throw new Error(
+          `Order ${order.orderNumber} has incomplete invoice data. ` +
+          `Missing required fields. Please re-import this order from CSV.`
+        );
+      }
+
+      // Validate required InvoiceData structure
+      const requiredFields = ['business', 'billToParty', 'shipToParty', 'lineItems', 'taxSummary'];
+      const missingFields = requiredFields.filter(field => !order.invoiceData[field]);
+      
+      if (missingFields.length > 0) {
+        throw new Error(
+          `Order ${order.orderNumber} has incomplete invoice data. ` +
+          `Missing: ${missingFields.join(', ')}. Please re-import this order from CSV.`
+        );
+      }
+
       // Create new invoice via API
       const invoice = await SupabaseService.createInvoice(order.invoiceData);
       await SupabaseService.updateOrder(order.id, {
@@ -860,6 +879,25 @@ function OrdersContent() {
           }
         }
 
+        // Validate invoiceData structure - fail fast if incomplete
+        if (!order.invoiceData || !order.invoiceData.metadata) {
+          throw new Error(
+            `Order ${order.orderNumber} has incomplete invoice data. ` +
+            `Missing required fields. Please re-import this order from CSV.`
+          );
+        }
+
+        // Validate required InvoiceData structure
+        const requiredFields = ['business', 'billToParty', 'shipToParty', 'lineItems', 'taxSummary'];
+        const missingFields = requiredFields.filter(field => !order.invoiceData[field]);
+        
+        if (missingFields.length > 0) {
+          throw new Error(
+            `Order ${order.orderNumber} has incomplete invoice data. ` +
+            `Missing: ${missingFields.join(', ')}. Please re-import this order from CSV.`
+          );
+        }
+
         // Create new invoice
         const invoice = await SupabaseService.createInvoice(order.invoiceData);
         await SupabaseService.updateOrder(order.id, {
@@ -899,9 +937,11 @@ function OrdersContent() {
         }
       }
     } catch (error) {
+      console.error('Error generating invoices:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate invoices';
       toast({
         title: 'Error',
-        description: 'Failed to generate invoices',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {

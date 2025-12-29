@@ -112,6 +112,20 @@ function getNumericValue(row: CSVRow, column: string | null): number {
   return isNaN(num) ? 0 : num;
 }
 
+// Extract order number from combined format (e.g., "MN-25-6 ushrama paid" -> "MN-25-6")
+function extractOrderNumber(value: string): string {
+  if (!value) return '';
+  // Pattern: Order number is typically at the start, followed by space and customer name/status
+  // Match patterns like "MAN-25-6235", "MN-25-6", "ORDER-123" at the start
+  const match = value.match(/^([A-Z]+-\d+-\d+|[A-Z]+-\d+|\d+[A-Z]*-?\d*)/i);
+  if (match) {
+    return match[1].trim();
+  }
+  // If no pattern match, return first word (might be order number)
+  const firstWord = value.split(/\s+/)[0];
+  return firstWord || value;
+}
+
 // Extract GST rate percentage from tax name (e.g., "IGST 3%" -> 3, "CGST 5%" -> 5)
 function extractGSTRateFromName(taxName: string): number {
   if (!taxName) return 0;
@@ -160,7 +174,9 @@ export function mapCSVToInvoice(
   const financialStatusCol = findColumn(headers, ['financial status', 'payment status', 'status']);
   const cancelledAtCol = findColumn(headers, ['cancelled at', 'cancelled date']);
 
-  const orderNo = getValue(row, orderNoCol) || `ORDER-${rowIndex + 1}`;
+  let orderNo = getValue(row, orderNoCol) || `ORDER-${rowIndex + 1}`;
+  // Clean order number if it contains customer name/status (e.g., "MN-25-6 ushrama paid" -> "MN-25-6")
+  orderNo = extractOrderNumber(orderNo);
   const orderDate = formatDate(getValue(row, orderDateCol));
   const invoiceDate = formatDate(new Date().toISOString());
   const paymentMethod = getValue(row, paymentMethodCol) || 'Prepaid';
@@ -186,14 +202,14 @@ export function mapCSVToInvoice(
   
   const cancelledAt = getValue(row, cancelledAtCol);
 
-  // Map billing party
-  const billingNameCol = findColumn(headers, ['billing name', 'name', 'customer name']);
-  const billingStreetCol = findColumn(headers, ['billing street', 'billing address1', 'billing address']);
-  const billingCityCol = findColumn(headers, ['billing city']);
-  const billingZipCol = findColumn(headers, ['billing zip', 'billing pincode']);
-  const billingProvinceCol = findColumn(headers, ['billing province', 'billing province name', 'billing state']);
-  const billingCountryCol = findColumn(headers, ['billing country']);
-  const billingPhoneCol = findColumn(headers, ['billing phone', 'phone']);
+  // Map billing party (handle abbreviated column names like "Billing Nam", "Billing Add", etc.)
+  const billingNameCol = findColumn(headers, ['billing nam', 'billing name', 'name', 'customer name']);
+  const billingStreetCol = findColumn(headers, ['billing add', 'billing street', 'billing address1', 'billing address']);
+  const billingCityCol = findColumn(headers, ['billing city', 'billing c']);
+  const billingZipCol = findColumn(headers, ['billing zip', 'billing pincode', 'billing pin']);
+  const billingProvinceCol = findColumn(headers, ['billing pro', 'billing province', 'billing province name', 'billing state']);
+  const billingCountryCol = findColumn(headers, ['billing cou', 'billing country']);
+  const billingPhoneCol = findColumn(headers, ['billing phone', 'billing ph', 'phone']);
 
   const billingState = getValue(row, billingProvinceCol) || '';
   const billToParty: PartyDetails = {
@@ -207,14 +223,14 @@ export function mapCSVToInvoice(
     phone: getValue(row, billingPhoneCol),
   };
 
-  // Map shipping party
-  const shippingNameCol = findColumn(headers, ['shipping name', 'billing name', 'name']);
-  const shippingStreetCol = findColumn(headers, ['shipping street', 'shipping address1', 'shipping address']);
-  const shippingCityCol = findColumn(headers, ['shipping city']);
-  const shippingZipCol = findColumn(headers, ['shipping zip', 'shipping pincode']);
-  const shippingProvinceCol = findColumn(headers, ['shipping province', 'shipping province name', 'shipping state']);
-  const shippingCountryCol = findColumn(headers, ['shipping country']);
-  const shippingPhoneCol = findColumn(headers, ['shipping phone', 'phone']);
+  // Map shipping party (handle abbreviated column names)
+  const shippingNameCol = findColumn(headers, ['shipping n', 'shipping name', 'billing name', 'name']);
+  const shippingStreetCol = findColumn(headers, ['shipping st', 'shipping a', 'shipping street', 'shipping address1', 'shipping address']);
+  const shippingCityCol = findColumn(headers, ['shipping c', 'shipping city']);
+  const shippingZipCol = findColumn(headers, ['shipping zip', 'shipping pincode', 'shipping pin']);
+  const shippingProvinceCol = findColumn(headers, ['shipping p', 'shipping pro', 'shipping province', 'shipping province name', 'shipping state']);
+  const shippingCountryCol = findColumn(headers, ['shipping cou', 'shipping country']);
+  const shippingPhoneCol = findColumn(headers, ['shipping ph', 'shipping phone', 'phone']);
 
   const shippingState = getValue(row, shippingProvinceCol) || billingState;
   const shipToParty: PartyDetails = {
@@ -229,19 +245,21 @@ export function mapCSVToInvoice(
   };
 
   // Map line items - use values directly from CSV (no calculations)
-  const lineItemNameCol = findColumn(headers, ['lineitem name', 'product name', 'item name']);
-  const lineItemSkuCol = findColumn(headers, ['lineitem sku', 'sku', 'variant sku']);
-  const lineItemQtyCol = findColumn(headers, ['lineitem quantity', 'quantity', 'qty']);
-  const lineItemPriceCol = findColumn(headers, ['lineitem price', 'price', 'unit price']);
-  const lineItemDiscountCol = findColumn(headers, ['lineitem discount', 'discount', 'discount amount']);
+  // Handle abbreviated column names like "LineItem n", "LineItem q", "LineItem u", "LineItem p"
+  const lineItemNameCol = findColumn(headers, ['lineitem n', 'lineitem name', 'product name', 'item name']);
+  const lineItemSkuCol = findColumn(headers, ['lineitem sku', 'lineitem s', 'sku', 'variant sku']);
+  const lineItemQtyCol = findColumn(headers, ['lineitem q', 'lineitem quantity', 'quantity', 'qty']);
+  const lineItemPriceCol = findColumn(headers, ['lineitem u', 'lineitem p', 'lineitem price', 'price', 'unit price']);
+  const lineItemDiscountCol = findColumn(headers, ['lineitem discount', 'lineitem d', 'discount', 'discount amount']);
   const taxableAmountCol = findColumn(headers, ['taxable amount', 'lineitem taxable', 'subtotal']);
   const hsnCol = findColumn(headers, ['hsn', 'hsn code', 'tax code']);
   // Try to get GST rate from Tax 1 Name first (e.g., "IGST 3%" -> 3), then fall back to other columns
-  const tax1NameCol = findColumn(headers, ['tax 1 name']);
-  const tax2NameCol = findColumn(headers, ['tax 2 name']);
+  // Handle "Name Tax 1", "Value Tax 1" format
+  const tax1NameCol = findColumn(headers, ['name tax 1', 'tax 1 name']);
+  const tax2NameCol = findColumn(headers, ['name tax 2', 'tax 2 name']);
   const gstRateCol = findColumn(headers, ['gst rate', 'tax rate']);
-  const tax1ValueCol = findColumn(headers, ['tax 1 value']);
-  const tax2ValueCol = findColumn(headers, ['tax 2 value']);
+  const tax1ValueCol = findColumn(headers, ['value tax 1', 'tax 1 value']);
+  const tax2ValueCol = findColumn(headers, ['value tax 2', 'tax 2 value']);
   const cgstCol = findColumn(headers, ['cgst', 'cgst amount']);
   const sgstCol = findColumn(headers, ['sgst', 'sgst amount']);
   const igstCol = findColumn(headers, ['igst', 'igst amount']);
@@ -443,7 +461,9 @@ export function mapMultipleOrders(data: ParsedCSVData): InvoiceData[] {
   const orderGroups = new Map<string, number[]>();
   
   data.rows.forEach((row, index) => {
-    const orderNo = getValue(row, orderNoCol) || `ORDER-${index + 1}`;
+    let orderNo = getValue(row, orderNoCol) || `ORDER-${index + 1}`;
+    // Clean order number if it contains customer name/status
+    orderNo = extractOrderNumber(orderNo);
     if (!orderGroups.has(orderNo)) {
       orderGroups.set(orderNo, []);
     }
@@ -475,8 +495,8 @@ export function mapMultipleOrders(data: ParsedCSVData): InvoiceData[] {
     
     // Get order-level GST rate from primary row (to apply to all line items if they don't have their own)
     const primaryRow = data.rows[primaryRowIndex];
-    const tax1NameCol = findColumn(headers, ['tax 1 name']);
-    const tax2NameCol = findColumn(headers, ['tax 2 name']);
+    const tax1NameCol = findColumn(headers, ['name tax 1', 'tax 1 name']);
+    const tax2NameCol = findColumn(headers, ['name tax 2', 'tax 2 name']);
     const gstRateCol = findColumn(headers, ['gst rate', 'tax rate']);
     let orderLevelGstRate = 0;
     if (tax1NameCol) {
@@ -501,8 +521,8 @@ export function mapMultipleOrders(data: ParsedCSVData): InvoiceData[] {
     const lineItemDiscountCol = findColumn(headers, ['lineitem discount', 'discount', 'discount amount']);
     const taxableAmountCol = findColumn(headers, ['taxable amount', 'lineitem taxable', 'subtotal']);
     const hsnCol = findColumn(headers, ['hsn', 'hsn code', 'tax code']);
-    const tax1ValueCol = findColumn(headers, ['tax 1 value']);
-    const tax2ValueCol = findColumn(headers, ['tax 2 value']);
+    const tax1ValueCol = findColumn(headers, ['value tax 1', 'tax 1 value']);
+    const tax2ValueCol = findColumn(headers, ['value tax 2', 'tax 2 value']);
     const cgstCol = findColumn(headers, ['cgst', 'cgst amount']);
     const sgstCol = findColumn(headers, ['sgst', 'sgst amount']);
     const igstCol = findColumn(headers, ['igst', 'igst amount']);

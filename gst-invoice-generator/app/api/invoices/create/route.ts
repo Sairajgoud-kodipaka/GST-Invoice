@@ -4,7 +4,36 @@ import { supabase } from '@/app/lib/supabase';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { invoiceNo, orderNo, invoiceDate, orderDate, customerName, totalAmount, invoiceData } = body;
+    
+    // Support both formats: direct fields OR invoiceData object
+    let invoiceNo: string | undefined;
+    let orderNo: string | undefined;
+    let invoiceDate: string | undefined;
+    let orderDate: string | undefined;
+    let customerName: string | undefined;
+    let totalAmount: number | undefined;
+    let invoiceData: any | undefined;
+
+    if (body.invoiceData && typeof body.invoiceData === 'object') {
+      // Extract from invoiceData object (new format from SupabaseService)
+      const data = body.invoiceData;
+      invoiceNo = data.metadata?.invoiceNo;
+      orderNo = data.metadata?.orderNo;
+      invoiceDate = data.metadata?.invoiceDate;
+      orderDate = data.metadata?.orderDate;
+      customerName = data.billToParty?.name;
+      totalAmount = data.taxSummary?.totalAmountAfterTax;
+      invoiceData = data;
+    } else {
+      // Direct fields format (old format from invoiceService)
+      invoiceNo = body.invoiceNo;
+      orderNo = body.orderNo;
+      invoiceDate = body.invoiceDate;
+      orderDate = body.orderDate;
+      customerName = body.customerName;
+      totalAmount = body.totalAmount;
+      invoiceData = body.invoiceData;
+    }
 
     // Validate required fields with detailed error messages
     if (!invoiceNo || typeof invoiceNo !== 'string') {
@@ -23,17 +52,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // invoiceDate is required, but provide a fallback if missing
-    let finalInvoiceDate = invoiceDate;
-    if (!finalInvoiceDate || typeof finalInvoiceDate !== 'string') {
-      // Fallback to current date if missing
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = now.getFullYear();
-      finalInvoiceDate = `${day}-${month}-${year}`;
-      console.warn('invoiceDate was missing or invalid, using fallback:', { received: invoiceDate, fallback: finalInvoiceDate });
+    // invoiceDate is required - use orderDate as fallback, but fail if both are missing
+    if (!invoiceDate || typeof invoiceDate !== 'string') {
+      if (orderDate && typeof orderDate === 'string') {
+        invoiceDate = orderDate; // Use order date if invoice date is missing
+      } else {
+        return NextResponse.json(
+          { 
+            error: 'invoiceDate is required. Order data is incomplete. Please re-import the order with complete date information.',
+            received: invoiceDate,
+            orderDate: orderDate
+          },
+          { status: 400 }
+        );
+      }
     }
+    const finalInvoiceDate = invoiceDate;
 
     // If Supabase is not configured, return error
     if (!supabase) {
@@ -110,6 +144,77 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate invoiceData structure - fail fast if incomplete
+    if (!invoiceData || typeof invoiceData !== 'object') {
+      return NextResponse.json(
+        { 
+          error: 'invoiceData is required and must be a complete InvoiceData object. Order data is incomplete. Please re-import the order.',
+          received: invoiceData ? typeof invoiceData : 'missing'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate required InvoiceData structure
+    const requiredFields = {
+      metadata: invoiceData.metadata,
+      business: invoiceData.business,
+      billToParty: invoiceData.billToParty,
+      shipToParty: invoiceData.shipToParty,
+      lineItems: invoiceData.lineItems,
+      taxSummary: invoiceData.taxSummary,
+    };
+
+    const missingFields: string[] = [];
+    for (const [field, value] of Object.entries(requiredFields)) {
+      if (!value || (Array.isArray(value) && value.length === 0)) {
+        missingFields.push(field);
+      }
+    }
+
+    if (missingFields.length > 0) {
+      return NextResponse.json(
+        { 
+          error: `Invoice data is incomplete. Missing required fields: ${missingFields.join(', ')}. Please re-import the order with complete data.`,
+          missingFields
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate metadata structure
+    if (!invoiceData.metadata.invoiceNo || !invoiceData.metadata.orderNo || !invoiceData.metadata.invoiceDate) {
+      return NextResponse.json(
+        { 
+          error: 'Invoice metadata is incomplete. Missing required fields: invoiceNo, orderNo, or invoiceDate. Please re-import the order.',
+          metadata: invoiceData.metadata
+        },
+        { status: 400 }
+      );
+    }
+
+    // Ensure metadata values match the extracted values (data integrity check)
+    if (invoiceData.metadata.invoiceNo !== invoiceNo || invoiceData.metadata.orderNo !== orderNo) {
+      return NextResponse.json(
+        { 
+          error: 'Data integrity check failed. Invoice metadata does not match extracted values. Please re-import the order.',
+          metadataInvoiceNo: invoiceData.metadata.invoiceNo,
+          extractedInvoiceNo: invoiceNo,
+          metadataOrderNo: invoiceData.metadata.orderNo,
+          extractedOrderNo: orderNo
+        },
+        { status: 400 }
+      );
+    }
+
+    // Update metadata with correct invoiceDate if it differs
+    invoiceData.metadata.invoiceDate = finalInvoiceDate;
+    if (orderDate) {
+      invoiceData.metadata.orderDate = orderDate;
+    }
+
+    const finalInvoiceData = invoiceData;
+
     // Create the invoice
     const { data: newInvoice, error: insertError } = await supabase
       .from('invoices')
@@ -120,7 +225,7 @@ export async function POST(request: NextRequest) {
         order_date: orderDate || null,
         customer_name: customerName || null,
         total_amount: totalAmount || null,
-        invoice_data: invoiceData || null,
+        invoice_data: finalInvoiceData,
         created_by: 'system', // Could be enhanced to track actual user
       })
       .select()

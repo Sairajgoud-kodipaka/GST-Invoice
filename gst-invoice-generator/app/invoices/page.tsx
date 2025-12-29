@@ -209,7 +209,7 @@ function InvoicesContent() {
             <div className="flex gap-2">
               <BatchPDFButton
                 invoices={invoices
-                  .filter((inv) => selectedInvoices.has(inv.id))
+                  .filter((inv) => selectedInvoices.has(inv.id) && inv.invoiceData && inv.invoiceData.metadata)
                   .map((inv) => inv.invoiceData)}
                 mode="merged"
                 size="sm"
@@ -217,7 +217,7 @@ function InvoicesContent() {
               />
               <BatchPDFButton
                 invoices={invoices
-                  .filter((inv) => selectedInvoices.has(inv.id))
+                  .filter((inv) => selectedInvoices.has(inv.id) && inv.invoiceData && inv.invoiceData.metadata)
                   .map((inv) => inv.invoiceData)}
                 mode="zip"
                 size="sm"
@@ -328,8 +328,19 @@ function InvoicesContent() {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <PDFButton invoice={invoice.invoiceData} size="sm" variant="ghost" />
-                            <PrintButton invoice={invoice.invoiceData} />
+                            {invoice.invoiceData && invoice.invoiceData.metadata ? (
+                              <>
+                                <PDFButton invoice={invoice.invoiceData} size="sm" variant="ghost" />
+                                <PrintButton invoice={invoice.invoiceData} />
+                              </>
+                            ) : (
+                              <span 
+                                className="text-xs text-red-600 cursor-help" 
+                                title="Invoice data is incomplete. Please regenerate this invoice from the Orders page."
+                              >
+                                Incomplete
+                              </span>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -384,14 +395,33 @@ function InvoicesContent() {
           </DialogHeader>
           {previewInvoice && (
             <div className="mt-4">
-              <InvoicePreview invoices={[previewInvoice.invoiceData]} />
-              <div className="flex gap-4 mt-6 justify-end">
-                <PDFButton invoice={previewInvoice.invoiceData} />
-                <PrintButton invoice={previewInvoice.invoiceData} />
-                <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
-                  Close
-                </Button>
-              </div>
+              {previewInvoice.invoiceData && previewInvoice.invoiceData.metadata ? (
+                <>
+                  <InvoicePreview invoices={[previewInvoice.invoiceData]} />
+                  <div className="flex gap-4 mt-6 justify-end">
+                    <PDFButton invoice={previewInvoice.invoiceData} />
+                    <PrintButton invoice={previewInvoice.invoiceData} />
+                    <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
+                      Close
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-red-600 font-semibold mb-2">Invoice data is incomplete</p>
+                  <p className="text-muted-foreground mb-4">
+                    This invoice was created with incomplete data. Please go to the Orders page and regenerate this invoice.
+                  </p>
+                  <div className="flex gap-2 justify-center">
+                    <Link href={`/orders?orderNo=${previewInvoice.orderNumber}`}>
+                      <Button>Go to Orders</Button>
+                    </Link>
+                    <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
