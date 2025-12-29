@@ -76,3 +76,5 @@ Let me update your Puppeteer configuration for better Vercel compatibility:
 
 
 
+
+

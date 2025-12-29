@@ -24,7 +24,8 @@ import { PDFButton } from '@/components/actions/PDFButton';
 import { BatchPDFButton } from '@/components/actions/BatchPDFButton';
 import { PrintButton } from '@/components/actions/PrintButton';
 import { InvoicePreview } from '@/components/invoice/InvoicePreview';
-import { invoicesStorage, ordersStorage, Invoice } from '@/app/lib/storage';
+import { Invoice } from '@/app/lib/storage';
+import { SupabaseService } from '@/app/lib/supabase-service';
 import { formatCurrency } from '@/app/lib/invoice-formatter';
 import { FileText, Search, Download, Trash2, Eye, MoreVertical } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -42,30 +43,19 @@ function InvoicesContent() {
   const itemsPerPage = 20;
 
   useEffect(() => {
-    const loadInvoices = async () => {
-      try {
-        const response = await fetch('/api/invoices/list');
-        if (response.ok) {
-          const data = await response.json();
-          const loadedInvoices = data.invoices || [];
-          setInvoices(loadedInvoices);
-          
-          // Check for invoiceId in URL params after loading
-          const invoiceId = searchParams.get('invoiceId');
-          if (invoiceId) {
-            const invoice = loadedInvoices.find((inv: Invoice) => inv.id === invoiceId);
-            if (invoice) {
-              setPreviewInvoice(invoice);
-              setIsPreviewOpen(true);
-            }
-          }
-        } else {
-          console.error('Failed to load invoices from API');
-          setInvoices([]);
+    const loadInvoices = () => {
+      // Use local storage consistently (same as dashboard and orders pages)
+      const allInvoices = invoicesStorage.getAll();
+      setInvoices(allInvoices);
+      
+      // Check for invoiceId in URL params after loading
+      const invoiceId = searchParams.get('invoiceId');
+      if (invoiceId) {
+        const invoice = allInvoices.find((inv: Invoice) => inv.id === invoiceId);
+        if (invoice) {
+          setPreviewInvoice(invoice);
+          setIsPreviewOpen(true);
         }
-      } catch (error) {
-        console.error('Error loading invoices:', error);
-        setInvoices([]);
       }
     };
 
@@ -121,64 +111,56 @@ function InvoicesContent() {
   const isIndeterminate =
     selectedInvoices.size > 0 && selectedInvoices.size < paginatedInvoices.length;
 
-  const handleDelete = (id: string) => {
-    // Get invoice before deleting to find the order
-    const invoice = invoicesStorage.getById(id);
-    
-    invoicesStorage.delete(id);
-    
-    // Update the corresponding order to mark it as not having an invoice
-    if (invoice) {
-      const allOrders = ordersStorage.getAll();
-      const order = allOrders.find((o) => o.invoiceId === id);
-      if (order) {
-        ordersStorage.update(order.id, {
-          hasInvoice: false,
-          invoiceId: undefined,
-        });
-      }
+  const handleDelete = async (id: string) => {
+    try {
+      // Delete invoice (API will handle updating orders)
+      await SupabaseService.deleteInvoice(id);
+      
+      // Reload invoices
+      const updatedInvoices = await SupabaseService.getInvoices();
+      setInvoices(updatedInvoices);
+      
+      setSelectedInvoices((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+      toast({
+        title: 'Success',
+        description: 'Invoice deleted successfully',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete invoice',
+        variant: 'destructive',
+      });
     }
-    
-    setInvoices(invoicesStorage.getAll());
-    setSelectedInvoices((prev) => {
-      const newSet = new Set(prev);
-      newSet.delete(id);
-      return newSet;
-    });
-    toast({
-      title: 'Success',
-      description: 'Invoice deleted successfully',
-    });
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     const ids = Array.from(selectedInvoices);
     
-    // Get invoices before deleting to find orders
-    const invoicesToDelete = ids.map(id => invoicesStorage.getById(id)).filter(Boolean);
-    
-    invoicesStorage.deleteMany(ids);
-    
-    // Update corresponding orders
-    const allOrders = ordersStorage.getAll();
-    invoicesToDelete.forEach((invoice) => {
-      if (invoice) {
-        const order = allOrders.find((o) => o.invoiceId === invoice.id);
-        if (order) {
-          ordersStorage.update(order.id, {
-            hasInvoice: false,
-            invoiceId: undefined,
-          });
-        }
-      }
-    });
-    
-    setInvoices(invoicesStorage.getAll());
-    setSelectedInvoices(new Set());
-    toast({
-      title: 'Success',
-      description: `${ids.length} invoice(s) deleted successfully`,
-    });
+    try {
+      // Delete invoices (API will handle updating orders)
+      await SupabaseService.deleteInvoices(ids);
+      
+      // Reload invoices
+      const updatedInvoices = await SupabaseService.getInvoices();
+      setInvoices(updatedInvoices);
+      setSelectedInvoices(new Set());
+      
+      toast({
+        title: 'Success',
+        description: `${ids.length} invoice(s) deleted successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete invoices',
+        variant: 'destructive',
+      });
+    }
   };
 
 

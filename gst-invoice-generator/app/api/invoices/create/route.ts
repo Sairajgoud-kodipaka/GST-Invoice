@@ -139,6 +139,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Update the order to mark it as having an invoice
+    if (newInvoice) {
+      const { error: updateOrderError } = await supabase
+        .from('orders')
+        .update({
+          has_invoice: true,
+          invoice_id: newInvoice.id,
+        })
+        .eq('order_no', orderNo);
+
+      if (updateOrderError) {
+        console.warn('Failed to update order after invoice creation:', updateOrderError);
+        // Don't fail the request, just log the warning
+      }
+    }
+
     return NextResponse.json({
       success: true,
       invoice: newInvoice,

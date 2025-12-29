@@ -34,13 +34,12 @@ import { Upload, Plus, Search, Trash2, FileText, Eye, MoreVertical, Pencil, Cale
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import {
-  ordersStorage,
-  invoicesStorage,
   Order,
   Invoice,
   invoiceDataToOrder,
   orderToInvoice,
 } from '@/app/lib/storage';
+import { SupabaseService } from '@/app/lib/supabase-service';
 import { formatCurrency } from '@/app/lib/invoice-formatter';
 import { InvoiceData } from '@/app/types/invoice';
 import { InvoicePreview } from '@/components/invoice/InvoicePreview';
@@ -557,22 +556,30 @@ function OrdersContent() {
   const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
-    const loadOrders = () => {
-      const allOrders = ordersStorage.getAll();
-      setOrders(allOrders);
+    const loadOrders = async () => {
+      try {
+        const [allOrders, allInvoices] = await Promise.all([
+          SupabaseService.getOrders(),
+          SupabaseService.getInvoices(),
+        ]);
+        setOrders(allOrders);
+        setInvoices(allInvoices);
+        
+        // Check for orderId in URL params
+        const orderId = searchParams.get('orderId');
+        if (orderId) {
+          const order = allOrders.find(o => o.id === orderId);
+          if (order) {
+            setPreviewOrder(order);
+            setIsPreviewOpen(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading orders:', error);
+      }
     };
 
     loadOrders();
-    
-    // Check for orderId in URL params
-    const orderId = searchParams.get('orderId');
-    if (orderId) {
-      const order = ordersStorage.getById(orderId);
-      if (order) {
-        setPreviewOrder(order);
-        setIsPreviewOpen(true);
-      }
-    }
     
     // Refresh every 5 seconds
     const interval = setInterval(loadOrders, 5000);
@@ -710,10 +717,11 @@ function OrdersContent() {
     try {
       // If invoice already exists, update it instead of creating duplicate
       if (order.hasInvoice && order.invoiceId) {
-        const existingInvoice = invoicesStorage.getById(order.invoiceId);
+        const allInvoices = await SupabaseService.getInvoices();
+        const existingInvoice = allInvoices.find(inv => inv.id === order.invoiceId);
         if (existingInvoice) {
           // Update existing invoice with current order data
-          invoicesStorage.update(order.invoiceId, {
+          await SupabaseService.updateInvoice(order.invoiceId, {
             invoiceData: order.invoiceData,
             customerName: order.customerName,
             amount: order.totalAmount,
@@ -735,18 +743,21 @@ function OrdersContent() {
               });
             }
           }
+          // Reload orders
+          const updatedOrders = await SupabaseService.getOrders();
+          setOrders(updatedOrders);
           return;
         }
       }
 
-      // Create new invoice
-      const invoice = orderToInvoice(order, order.invoiceData);
-      invoicesStorage.add(invoice);
-      ordersStorage.update(order.id, {
+      // Create new invoice via API
+      const invoice = await SupabaseService.createInvoice(order.invoiceData);
+      await SupabaseService.updateOrder(order.id, {
         hasInvoice: true,
         invoiceId: invoice.id,
       });
-      setOrders(ordersStorage.getAll());
+      const updatedOrders = await SupabaseService.getOrders();
+      setOrders(updatedOrders);
       toast({
         title: 'Success',
         description: `Invoice ${invoice.invoiceNumber} generated successfully`,
@@ -777,15 +788,25 @@ function OrdersContent() {
   };
 
   const handleInvoicesReady = useCallback(
-    (generatedInvoices: InvoiceData[]) => {
-      const newOrders = generatedInvoices.map(invoiceDataToOrder);
-      ordersStorage.addMany(newOrders);
-      setOrders(ordersStorage.getAll());
-      setShowUpload(false); // Hide upload section after successful import
-      toast({
-        title: 'Success',
-        description: `${newOrders.length} order(s) imported successfully`,
-      });
+    async (generatedInvoices: InvoiceData[]) => {
+      try {
+        const newOrders = generatedInvoices.map(invoiceDataToOrder);
+        await SupabaseService.createOrders(newOrders);
+        const updatedOrders = await SupabaseService.getOrders();
+        setOrders(updatedOrders);
+        setShowUpload(false); // Hide upload section after successful import
+        toast({
+          title: 'Success',
+          description: `${newOrders.length} order(s) imported successfully`,
+        });
+      } catch (error) {
+        console.error('Error importing orders:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to import orders',
+          variant: 'destructive',
+        });
+      }
     },
     [toast]
   );
@@ -821,33 +842,34 @@ function OrdersContent() {
     try {
       const updatedInvoices: Invoice[] = [];
       const newInvoices: Invoice[] = [];
+      const allInvoices = await SupabaseService.getInvoices();
       
-      selectedOrdersData.forEach((order) => {
+      for (const order of selectedOrdersData) {
         // If invoice already exists, update it instead of creating duplicate
         if (order.hasInvoice && order.invoiceId) {
-          const existingInvoice = invoicesStorage.getById(order.invoiceId);
+          const existingInvoice = allInvoices.find(inv => inv.id === order.invoiceId);
           if (existingInvoice) {
-            invoicesStorage.update(order.invoiceId, {
+            await SupabaseService.updateInvoice(order.invoiceId, {
               invoiceData: order.invoiceData,
               customerName: order.customerName,
               amount: order.totalAmount,
             });
             updatedInvoices.push(existingInvoice);
-            return;
+            continue;
           }
         }
 
         // Create new invoice
-        const invoice = orderToInvoice(order, order.invoiceData);
-        invoicesStorage.add(invoice);
-        ordersStorage.update(order.id, {
+        const invoice = await SupabaseService.createInvoice(order.invoiceData);
+        await SupabaseService.updateOrder(order.id, {
           hasInvoice: true,
           invoiceId: invoice.id,
         });
         newInvoices.push(invoice);
-      });
+      }
 
-      setOrders(ordersStorage.getAll());
+      const updatedOrders = await SupabaseService.getOrders();
+      setOrders(updatedOrders);
       setSelectedOrders(new Set());
       
       const totalProcessed = newInvoices.length + updatedInvoices.length;
@@ -890,8 +912,9 @@ function OrdersContent() {
     if (isDeleting === id) return; // Prevent duplicate clicks
     setIsDeleting(id);
     try {
-      ordersStorage.delete(id);
-      setOrders(ordersStorage.getAll());
+      await SupabaseService.deleteOrder(id);
+      const updatedOrders = await SupabaseService.getOrders();
+      setOrders(updatedOrders);
       setSelectedOrders((prev) => {
         const newSet = new Set(prev);
         newSet.delete(id);
@@ -917,8 +940,9 @@ function OrdersContent() {
     setIsBulkDeleting(true);
     try {
       const ids = Array.from(selectedOrders);
-      ordersStorage.deleteMany(ids);
-      setOrders(ordersStorage.getAll());
+      await SupabaseService.deleteOrders(ids);
+      const updatedOrders = await SupabaseService.getOrders();
+      setOrders(updatedOrders);
       setSelectedOrders(new Set());
       toast({
         title: 'Success',
@@ -956,10 +980,11 @@ function OrdersContent() {
     }
 
     // Get invoice data for selected orders
+    const allInvoices = await SupabaseService.getInvoices();
     const invoiceData = ordersWithInvoices
       .map((order) => {
         if (order.invoiceId) {
-          const invoice = invoicesStorage.getById(order.invoiceId);
+          const invoice = allInvoices.find(inv => inv.id === order.invoiceId);
           return invoice?.invoiceData;
         }
         return null;
@@ -1066,12 +1091,12 @@ function OrdersContent() {
     setIsEditOpen(true);
   };
 
-  const handleSaveEdit = (updatedInvoiceData: InvoiceData) => {
+  const handleSaveEdit = async (updatedInvoiceData: InvoiceData) => {
     if (!editOrder) return;
 
     try {
       // Update order's invoice data
-      ordersStorage.update(editOrder.id, {
+      await SupabaseService.updateOrder(editOrder.id, {
         invoiceData: updatedInvoiceData,
         customerName: updatedInvoiceData.billToParty.name,
         totalAmount: updatedInvoiceData.taxSummary.totalAmountAfterTax,
@@ -1079,9 +1104,10 @@ function OrdersContent() {
 
       // If order has an invoice, update it too
       if (editOrder.hasInvoice && editOrder.invoiceId) {
-        const invoice = invoicesStorage.getById(editOrder.invoiceId);
+        const allInvoices = await SupabaseService.getInvoices();
+        const invoice = allInvoices.find(inv => inv.id === editOrder.invoiceId);
         if (invoice) {
-          invoicesStorage.update(editOrder.invoiceId, {
+          await SupabaseService.updateInvoice(editOrder.invoiceId, {
             invoiceData: updatedInvoiceData,
             customerName: updatedInvoiceData.billToParty.name,
             amount: updatedInvoiceData.taxSummary.totalAmountAfterTax,
@@ -1089,7 +1115,8 @@ function OrdersContent() {
         }
       }
 
-      setOrders(ordersStorage.getAll());
+      const updatedOrders = await SupabaseService.getOrders();
+      setOrders(updatedOrders);
       setIsEditOpen(false);
       setEditOrder(null);
       toast({
@@ -1337,7 +1364,7 @@ function OrdersContent() {
                               href={`/invoices?invoiceId=${order.invoiceId}`}
                               className="hover:underline text-primary"
                             >
-                              {invoicesStorage.getById(order.invoiceId)?.invoiceNumber || 'N/A'}
+                              {invoices.find(inv => inv.id === order.invoiceId)?.invoiceNumber || 'N/A'}
                             </Link>
                           ) : (
                             <span className="text-muted-foreground">—</span>

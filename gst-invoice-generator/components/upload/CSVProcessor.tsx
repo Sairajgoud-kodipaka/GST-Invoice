@@ -129,6 +129,7 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
         // Check for duplicates and create invoices in Supabase
         const invoicesWithNumbers: InvoiceData[] = [];
         const skippedInvoices: Array<{ invoiceNo: string; reason: string; orderNo: string }> = [];
+        const updatedOrders: Array<{ orderNo: string; differences: Array<{ field: string; oldValue: any; newValue: any }> }> = [];
         
         for (const invoice of rawInvoices) {
           // Use the invoice number that was already set by the field-mapper
@@ -137,6 +138,86 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
           const orderNo = invoice.metadata.orderNo;
           
           console.log(`Processing order ${orderNo} with expected invoice ${expectedInvoiceNo}`);
+          
+          // EDGE CASE 1: Check if order already exists
+          try {
+            const orderCheckResponse = await fetch('/api/orders/check', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                orderNo: orderNo,
+                orderDate: invoice.metadata.orderDate,
+                customerName: invoice.billToParty.name,
+                totalAmount: invoice.taxSummary.totalAmountAfterTax,
+                orderData: invoice,
+              }),
+            });
+            
+            if (orderCheckResponse.ok) {
+              const orderCheck = await orderCheckResponse.json();
+              
+              if (orderCheck.exists) {
+                if (orderCheck.isIdentical) {
+                  // Order exists and is exactly the same - skip with message
+                  console.log(`Order ${orderNo} already exists and is identical`);
+                  skippedInvoices.push({
+                    invoiceNo: expectedInvoiceNo,
+                    reason: `This order already exists. Order ${orderNo} has not changed.`,
+                    orderNo: orderNo,
+                  });
+                  continue;
+                } else {
+                  // Order exists but has changes - update it
+                  console.log(`Order ${orderNo} exists but has changes:`, orderCheck.differences);
+                  updatedOrders.push({
+                    orderNo: orderNo,
+                    differences: orderCheck.differences || [],
+                  });
+                  
+                  // Update the order in database (will be handled by upsert in bulk-create)
+                  // But we also need to update the invoice if it exists
+                  if (orderCheck.existingOrder?.hasInvoice && orderCheck.existingOrder?.invoiceId) {
+                    // Update the invoice data
+                    try {
+                      const updateInvoiceResponse = await fetch('/api/invoices/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          id: orderCheck.existingOrder.invoiceId,
+                          updates: {
+                            invoiceData: invoice,
+                            amount: invoice.taxSummary.totalAmountAfterTax,
+                            customerName: invoice.billToParty.name,
+                          },
+                        }),
+                      });
+                      
+                      if (updateInvoiceResponse.ok) {
+                        console.log(`Updated invoice for order ${orderNo}`);
+                        // Get the existing invoice number from the invoice
+                        const invoiceResponse = await updateInvoiceResponse.json();
+                        const existingInvoiceNo = invoiceResponse.invoice?.invoiceNumber || 
+                                                  orderCheck.existingOrder.orderData?.metadata?.invoiceNo || 
+                                                  expectedInvoiceNo;
+                        invoice.metadata.invoiceNo = existingInvoiceNo;
+                        invoicesWithNumbers.push(invoice);
+                        continue;
+                      }
+                    } catch (updateError) {
+                      console.error(`Error updating invoice for order ${orderNo}:`, updateError);
+                      // Continue with normal flow if update fails
+                    }
+                  }
+                  
+                  // If no invoice exists yet, continue with normal flow
+                  // The order will be updated via upsert
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`Error checking order ${orderNo}:`, error);
+            // Continue with normal flow if check fails
+          }
           
           // STRICT VALIDATION 1: Check if order already has an invoice (prevent regeneration)
           try {
@@ -149,24 +230,23 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
             if (orderCheckResponse.ok) {
               const orderCheck = await orderCheckResponse.json();
               if (orderCheck.hasInvoice) {
-                // Order already has an invoice - prevent regeneration
-                console.log(`Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}`);
-                skippedInvoices.push({
-                  invoiceNo: expectedInvoiceNo,
-                  reason: `Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}. Cannot regenerate invoices.`,
-                  orderNo: orderNo,
-                });
-                continue;
+                // Order already has an invoice - but we already handled updates above
+                // Only skip if we didn't update it
+                const wasUpdated = updatedOrders.some(u => u.orderNo === orderNo);
+                if (!wasUpdated) {
+                  console.log(`Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}`);
+                  skippedInvoices.push({
+                    invoiceNo: expectedInvoiceNo,
+                    reason: `Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}. Cannot regenerate invoices.`,
+                    orderNo: orderNo,
+                  });
+                  continue;
+                }
               }
             }
           } catch (error) {
             console.error(`Error checking order ${orderNo}:`, error);
-            skippedInvoices.push({
-              invoiceNo: expectedInvoiceNo,
-              reason: `Error checking if order has invoice: ${error instanceof Error ? error.message : 'Unknown error'}`,
-              orderNo: orderNo,
-            });
-            continue;
+            // Continue with normal flow
           }
           
           // STRICT VALIDATION 2: Check if invoice number already exists (prevent duplicates)
@@ -258,11 +338,38 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
           };
         });
 
+        // Show success message for updated orders
+        if (updatedOrders.length > 0) {
+          const updateDetails = updatedOrders.slice(0, 3).map(u => {
+            const diffSummary = u.differences.map(d => {
+              if (d.field === 'financialStatus') {
+                return `Status: ${d.oldValue} → ${d.newValue}`;
+              } else if (d.field === 'paymentMethod') {
+                return `Payment: ${d.oldValue} → ${d.newValue}`;
+              } else if (d.field === 'totalAmount' || d.field === 'orderDataTotal') {
+                return `Amount: ₹${d.oldValue} → ₹${d.newValue}`;
+              } else {
+                return `${d.field}: ${d.oldValue} → ${d.newValue}`;
+              }
+            }).join(', ');
+            return `Order ${u.orderNo}: ${diffSummary}`;
+          }).join('\n');
+          const moreCount = updatedOrders.length > 3 ? `\n... and ${updatedOrders.length - 3} more orders` : '';
+          
+          toast({
+            title: `${updatedOrders.length} order(s) updated`,
+            description: `The following orders were updated with new data:\n\n${updateDetails}${moreCount}\n\nOrders and invoices have been updated in the database.`,
+            duration: 20000, // Show for 20 seconds
+          });
+        }
+
         // Show warnings for skipped invoices
         if (skippedInvoices.length > 0) {
           const allSkipped = skippedInvoices.length === rawInvoices.length;
           const alreadyExistsCount = skippedInvoices.filter(s => 
-            s.reason.includes('already has invoice') || s.reason.includes('already exists')
+            s.reason.includes('already has invoice') || 
+            s.reason.includes('already exists') ||
+            s.reason.includes('This order already exists')
           ).length;
           
           let title = '';
@@ -270,14 +377,28 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps) {
           
           if (allSkipped && alreadyExistsCount === skippedInvoices.length) {
             // All invoices already exist
-            title = 'All invoices already exist';
-            const skippedDetails = skippedInvoices.slice(0, 3).map(s => {
-              const invoiceMatch = s.reason.match(/invoice (O-\/\d+)/);
-              const existingInvoice = invoiceMatch ? invoiceMatch[1] : 'existing invoice';
-              return `Order ${s.orderNo} → Invoice ${existingInvoice}`;
-            }).join('\n');
-            const moreCount = skippedInvoices.length > 3 ? `\n... and ${skippedInvoices.length - 3} more orders` : '';
-            description = `All ${skippedInvoices.length} order(s) already have invoices and cannot be regenerated.\n\nExamples:\n${skippedDetails}${moreCount}\n\nTo import these orders again, you must first delete the existing invoices from the Invoices page.`;
+            title = 'All orders already exist';
+            const identicalCount = skippedInvoices.filter(s => 
+              s.reason.includes('This order already exists')
+            ).length;
+            
+            if (identicalCount === skippedInvoices.length) {
+              // All are identical
+              description = `All ${skippedInvoices.length} order(s) already exist and are identical. No changes detected.\n\nExamples:\n${skippedInvoices.slice(0, 3).map(s => `Order ${s.orderNo}`).join('\n')}${skippedInvoices.length > 3 ? `\n... and ${skippedInvoices.length - 3} more` : ''}`;
+            } else {
+              // Mix of identical and with invoices
+              const skippedDetails = skippedInvoices.slice(0, 3).map(s => {
+                if (s.reason.includes('This order already exists')) {
+                  return `Order ${s.orderNo} (identical)`;
+                } else {
+                  const invoiceMatch = s.reason.match(/invoice (O-\/\d+)/);
+                  const existingInvoice = invoiceMatch ? invoiceMatch[1] : 'existing invoice';
+                  return `Order ${s.orderNo} → Invoice ${existingInvoice}`;
+                }
+              }).join('\n');
+              const moreCount = skippedInvoices.length > 3 ? `\n... and ${skippedInvoices.length - 3} more orders` : '';
+              description = `All ${skippedInvoices.length} order(s) already exist.\n\nExamples:\n${skippedDetails}${moreCount}`;
+            }
           } else if (allSkipped) {
             // All skipped but mixed reasons
             title = 'All invoices were skipped';

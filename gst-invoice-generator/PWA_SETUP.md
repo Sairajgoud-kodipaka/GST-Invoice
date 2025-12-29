@@ -87,3 +87,5 @@ Modify `runtimeCaching` in `next.config.ts` to change how resources are cached.
 - These files are gitignored (see `.gitignore`)
 - The install prompt respects user preferences and won't show again if dismissed
 
+
+

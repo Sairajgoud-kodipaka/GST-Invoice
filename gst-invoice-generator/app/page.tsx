@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ShoppingCart, FileText, Plus, Settings, Calendar } from 'lucide-react';
-import { ordersStorage, invoicesStorage, Order, Invoice } from '@/app/lib/storage';
+import { Order, Invoice } from '@/app/lib/storage';
 import { formatCurrency } from '@/app/lib/invoice-formatter';
+import { SupabaseService } from '@/app/lib/supabase-service';
 
 export default function Dashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -16,12 +17,19 @@ export default function Dashboard() {
   const [dateTo, setDateTo] = useState<string>('');
 
   useEffect(() => {
-    const loadData = () => {
-      const allOrders = ordersStorage.getAll();
-      const allInvoices = invoicesStorage.getAll();
-      setOrders(allOrders);
-      setInvoices(allInvoices);
-      setIsLoading(false);
+    const loadData = async () => {
+      try {
+        const [allOrders, allInvoices] = await Promise.all([
+          SupabaseService.getOrders(),
+          SupabaseService.getInvoices(),
+        ]);
+        setOrders(allOrders);
+        setInvoices(allInvoices);
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setIsLoading(false);
+      }
     };
 
     loadData();

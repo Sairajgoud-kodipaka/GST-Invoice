@@ -78,3 +78,5 @@ I've updated your Puppeteer config with better Vercel-compatible settings:
 
 
 
+
+
