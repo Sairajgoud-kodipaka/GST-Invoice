@@ -23,6 +23,19 @@ export function InstallPrompt() {
 
     // Listen for the beforeinstallprompt event
     const handleBeforeInstallPrompt = (e: Event) => {
+      // Only prevent default if we're going to show our custom prompt
+      // Check if user has dismissed recently
+      const dismissed = localStorage.getItem('pwa-install-dismissed');
+      if (dismissed) {
+        const dismissedTime = parseInt(dismissed, 10);
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        if (dismissedTime > oneDayAgo) {
+          // User dismissed recently, don't prevent default (let browser show its banner)
+          return;
+        }
+      }
+      
+      // We'll show our custom prompt, so prevent the default browser banner
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       setShowPrompt(true);

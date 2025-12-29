@@ -6,26 +6,33 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { invoiceNo, orderNo, invoiceDate, orderDate, customerName, totalAmount, invoiceData } = body;
 
-    // Validate required fields
+    // Validate required fields with detailed error messages
     if (!invoiceNo || typeof invoiceNo !== 'string') {
+      console.error('Invalid invoiceNo:', { invoiceNo, type: typeof invoiceNo, body: JSON.stringify(body).substring(0, 200) });
       return NextResponse.json(
-        { error: 'invoiceNo is required and must be a string' },
+        { error: 'invoiceNo is required and must be a string', received: invoiceNo, type: typeof invoiceNo },
         { status: 400 }
       );
     }
 
     if (!orderNo || typeof orderNo !== 'string') {
+      console.error('Invalid orderNo:', { orderNo, type: typeof orderNo, body: JSON.stringify(body).substring(0, 200) });
       return NextResponse.json(
-        { error: 'orderNo is required and must be a string' },
+        { error: 'orderNo is required and must be a string', received: orderNo, type: typeof orderNo },
         { status: 400 }
       );
     }
 
-    if (!invoiceDate || typeof invoiceDate !== 'string') {
-      return NextResponse.json(
-        { error: 'invoiceDate is required and must be a string' },
-        { status: 400 }
-      );
+    // invoiceDate is required, but provide a fallback if missing
+    let finalInvoiceDate = invoiceDate;
+    if (!finalInvoiceDate || typeof finalInvoiceDate !== 'string') {
+      // Fallback to current date if missing
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      finalInvoiceDate = `${day}-${month}-${year}`;
+      console.warn('invoiceDate was missing or invalid, using fallback:', { received: invoiceDate, fallback: finalInvoiceDate });
     }
 
     // If Supabase is not configured, return error
@@ -109,7 +116,7 @@ export async function POST(request: NextRequest) {
       .insert({
         invoice_no: invoiceNo,
         order_no: orderNo,
-        invoice_date: invoiceDate,
+        invoice_date: finalInvoiceDate,
         order_date: orderDate || null,
         customer_name: customerName || null,
         total_amount: totalAmount || null,
