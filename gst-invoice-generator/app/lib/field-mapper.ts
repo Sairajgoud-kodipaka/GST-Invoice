@@ -405,16 +405,12 @@ export function mapCSVToInvoice(
   const totalAmountAfterTax = getNumericValue(row, totalAmountCol) || 0; // Use from CSV only, no calculation
 
   // Create invoice metadata - invoice number should be provided by caller
-  // Falls back to order-based mapping or localStorage if not provided
+  // Uses sequential numbering (ignores order-based mapping for sequential invoice numbers)
   let finalInvoiceNo = invoiceNo;
   if (!finalInvoiceNo) {
-    // Try to get invoice number from order number mapping first
-    // Using sync version for compatibility (will use localStorage cache or Supabase via API)
-    if (orderNo) {
-      finalInvoiceNo = invoiceSettingsStorage.getInvoiceNumberFromOrderNumberSync(orderNo);
-    } else {
-      finalInvoiceNo = invoiceSettingsStorage.getNextInvoiceNumberSync();
-    }
+    // Always use sequential numbering - get next invoice number from database
+    // This ensures invoice numbers increment sequentially regardless of order numbers
+    finalInvoiceNo = invoiceSettingsStorage.getNextInvoiceNumberSync();
   }
   
   const metadata: InvoiceMetadata = {

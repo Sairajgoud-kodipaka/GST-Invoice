@@ -750,15 +750,26 @@ export default function SettingsPage() {
                 placeholder="O-/3579"
               />
               <p className="text-xs text-muted-foreground">
-                Enter your latest invoice number (e.g., O-/3579). The system will extract the prefix and set the next number automatically.
+                Enter your latest invoice number (e.g., O-/3579). The system uses <strong>sequential numbering</strong> - 
+                it will automatically find the highest invoice number in the database and use the next sequential number for new invoices.
               </p>
             </div>
 
             <div className="space-y-2 md:col-span-2 border-t pt-4">
-              <Label className="text-base font-semibold">Order Number to Invoice Number Mapping</Label>
+              <Label className="text-base font-semibold">Order Number to Invoice Number Mapping (Deprecated)</Label>
               <p className="text-xs text-muted-foreground mb-4">
-                Set the mapping between order numbers and invoice numbers. For example, if order 6244 corresponds to invoice O-/3579, enter both values below. The system will maintain this relationship for all subsequent orders.
+                <strong>Note:</strong> The system now uses <strong>sequential invoice numbering</strong> by default. 
+                Invoice numbers increment sequentially (e.g., O-/3579, O-/3580, O-/3581...) regardless of order numbers. 
+                This mapping is kept for reference only and is no longer used for invoice number generation.
               </p>
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg mb-4">
+                <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">
+                  Sequential Numbering Active
+                </p>
+                <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                  New invoices will automatically get the next sequential number based on the highest existing invoice number in the database.
+                </p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="startingOrderNumber">Starting Order Number</Label>

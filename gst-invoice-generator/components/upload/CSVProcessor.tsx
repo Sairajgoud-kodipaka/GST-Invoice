@@ -126,20 +126,20 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
 
         setProgress(fileProgressStart + fileProgressRange * 0.5);
 
-        // Use invoice numbers already set by field-mapper (which uses order-based mapping)
-        // Check for duplicates and create invoices in Supabase
+        // Process invoices with sequential numbering
+        // This ensures invoice numbers increment sequentially regardless of order numbers
         const invoicesWithNumbers: InvoiceData[] = [];
         const skippedInvoices: Array<{ invoiceNo: string; reason: string; orderNo: string }> = [];
         const updatedOrders: Array<{ orderNo: string; differences: Array<{ field: string; oldValue: any; newValue: any }> }> = [];
         const existingInvoices: Array<{ invoiceNo: string; orderNo: string }> = []; // Track invoices that already exist
         
         for (const invoice of rawInvoices) {
-          // Use the invoice number that was already set by the field-mapper
-          // This respects the order-based mapping configured in settings
-          const expectedInvoiceNo = invoice.metadata.invoiceNo;
           const orderNo = invoice.metadata.orderNo;
           
-          console.log(`Processing order ${orderNo} with expected invoice ${expectedInvoiceNo}`);
+          // Initialize invoice number - will be set based on order status
+          let expectedInvoiceNo = invoice.metadata.invoiceNo;
+          
+          console.log(`Processing order ${orderNo}`);
           
           // EDGE CASE 1: Check if order already exists
           try {
@@ -202,9 +202,9 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
                         // Get the existing invoice number from the invoice
                         const invoiceResponse = await updateInvoiceResponse.json();
                         const existingInvoiceNo = invoiceResponse.invoice?.invoiceNumber || 
-                                                  orderCheck.existingOrder.orderData?.metadata?.invoiceNo || 
-                                                  expectedInvoiceNo;
+                                                  orderCheck.existingOrder.orderData?.metadata?.invoiceNo;
                         invoice.metadata.invoiceNo = existingInvoiceNo;
+                        expectedInvoiceNo = existingInvoiceNo;
                         invoicesWithNumbers.push(invoice);
                         continue;
                       }
@@ -239,17 +239,20 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
             } else {
               const orderCheck = await orderCheckResponse.json();
               if (orderCheck.hasInvoice) {
-                // Order already has an invoice - but we already handled updates above
-                // Only skip if we didn't update it
+                // Order already has an invoice - use that invoice number
+                const existingInvoiceNo = orderCheck.invoice.invoiceNo;
+                invoice.metadata.invoiceNo = existingInvoiceNo;
+                expectedInvoiceNo = existingInvoiceNo;
+                // But we already handled updates above, so only skip if we didn't update it
                 const wasUpdated = updatedOrders.some(u => u.orderNo === orderNo);
                 if (!wasUpdated) {
-                console.log(`Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}`);
-                skippedInvoices.push({
-                  invoiceNo: expectedInvoiceNo,
-                  reason: `Order ${orderNo} already has invoice ${orderCheck.invoice.invoiceNo}. Cannot regenerate invoices.`,
-                  orderNo: orderNo,
-                });
-                continue;
+                  console.log(`Order ${orderNo} already has invoice ${existingInvoiceNo}`);
+                  skippedInvoices.push({
+                    invoiceNo: existingInvoiceNo,
+                    reason: `Order ${orderNo} already has invoice ${existingInvoiceNo}. Cannot regenerate invoices.`,
+                    orderNo: orderNo,
+                  });
+                  continue;
                 }
               }
             }
@@ -257,6 +260,13 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
             // Network or parsing error - log but continue (don't block import)
             console.warn(`Error checking invoice for order ${orderNo}, continuing with import:`, error);
             // Continue with normal flow
+          }
+          
+          // Assign sequential invoice number if not already assigned
+          // This ensures new invoices get sequential numbers regardless of order numbers
+          if (!expectedInvoiceNo) {
+            expectedInvoiceNo = await invoiceService.getNext();
+            invoice.metadata.invoiceNo = expectedInvoiceNo;
           }
           
           // STRICT VALIDATION 2: Check if invoice number already exists (prevent duplicates)
