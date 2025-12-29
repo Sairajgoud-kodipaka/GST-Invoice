@@ -66,7 +66,8 @@ async function generateSinglePDF(
   browser: any,
   invoice: InvoiceData,
   baseUrl: string,
-  hidePageNumbers: boolean = false
+  hidePageNumbers: boolean = false,
+  isBatch: boolean = false
 ): Promise<Buffer> {
   console.log(`📄 Generating PDF for invoice: ${invoice.metadata.invoiceNo}`);
   
@@ -228,7 +229,8 @@ async function generateSinglePDF(
     
     console.log('📄 Generating PDF...');
     
-    // ✅ Generate PDF with small margin to prevent border clipping
+    // ✅ Generate PDF with margins to prevent border clipping
+    // For batch mode, use slightly larger bottom margin to prevent border mixing
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -236,7 +238,7 @@ async function generateSinglePDF(
       margin: { 
         top: '3mm',    // Small margin to ensure border is visible
         right: '3mm', 
-        bottom: '3mm', 
+        bottom: isBatch ? '5mm' : '3mm',  // Larger bottom margin for batch to prevent border mixing
         left: '3mm' 
       },
     });
@@ -374,7 +376,8 @@ export async function POST(request: NextRequest) {
       let currentPageIndex = 0;
       
       for (const invoice of invoices as InvoiceData[]) {
-        const pdfBytes = await generateSinglePDF(browser, invoice, appUrl, true); // hidePageNumbers = true
+        // Generate PDF with batch flag to use larger bottom margin
+        const pdfBytes = await generateSinglePDF(browser, invoice, appUrl, true, true); // hidePageNumbers = true, isBatch = true
         const invoicePdf = await PDFDocument.load(pdfBytes);
         const pages = await pdfDoc.copyPages(invoicePdf, invoicePdf.getPageIndices());
         pages.forEach((page) => {
@@ -406,15 +409,16 @@ export async function POST(request: NextRequest) {
         // Calculate footer position to match CSS footer styling
         // CSS footer: bottom: '12mm', padding: '6px 0' (6px ≈ 0.15mm ≈ 0.43 points)
         // A4: 210mm × 297mm = 595.28 × 841.89 points
-        // PDF margin: 3mm = 8.5 points (from PDF generation)
+        // PDF margin: 3mm top/left/right, 5mm bottom for batch = 8.5 points top, 14.17 points bottom
         // Invoice padding: 8mm = 22.68 points
         // CSS footer bottom: 12mm = 34.02 points from bottom of invoice content
-        // Accounting for PDF margin: footer is at 8.5 + 12mm = 8.5 + 34.02 = 42.52 points from bottom of page
+        // Accounting for PDF margin: footer is at 14.17 + 12mm = 14.17 + 34.02 = 48.19 points from bottom of page
         // Plus half of padding (6px/2 = 3px ≈ 0.22 points) for vertical centering
-        const pdfMargin = 8.5; // 3mm in points
+        const pdfMarginBottom = 14.17; // 5mm in points (batch mode uses larger bottom margin)
+        const pdfMargin = 8.5; // 3mm in points (for other margins)
         const footerBottomOffset = 34.02; // 12mm in points (matches CSS bottom: '12mm')
         const footerPadding = 0.43; // 6px ≈ 0.43 points (half for vertical center)
-        const footerY = pdfMargin + footerBottomOffset + footerPadding; // Position from bottom of page
+        const footerY = pdfMarginBottom + footerBottomOffset + footerPadding; // Position from bottom of page
         
         // Calculate text position - match the CSS footer which has "Generated from: website Page X of Y"
         // The page number should align right after "Generated from: website"

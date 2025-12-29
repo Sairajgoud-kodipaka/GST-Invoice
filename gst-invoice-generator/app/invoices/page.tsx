@@ -27,7 +27,7 @@ import { InvoicePreview } from '@/components/invoice/InvoicePreview';
 import { Invoice } from '@/app/lib/storage';
 import { SupabaseService } from '@/app/lib/supabase-service';
 import { formatCurrency } from '@/app/lib/invoice-formatter';
-import { FileText, Search, Download, Trash2, Eye, MoreVertical, Upload } from 'lucide-react';
+import { FileText, Search, Download, Trash2, Eye, MoreVertical, Upload, Calendar } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { CSVProcessor } from '@/components/upload/CSVProcessor';
@@ -41,6 +41,8 @@ function InvoicesContent() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
   const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -92,18 +94,58 @@ function InvoicesContent() {
     return () => clearInterval(interval);
   }, [searchParams, toast]);
 
-  // Filter invoices based on search
-  const filteredInvoices = useMemo(() => {
-    if (!searchQuery.trim()) return invoices;
+  // Helper function to parse invoice date (DD-MM-YYYY)
+  const parseInvoiceDate = (dateStr: string): Date | null => {
+    if (!dateStr) return null;
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return null;
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const year = parseInt(parts[2], 10);
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+    return new Date(year, month, day);
+  };
 
-    const query = searchQuery.toLowerCase();
-    return invoices.filter(
-      (inv) =>
-        inv.invoiceNumber.toLowerCase().includes(query) ||
-        inv.customerName.toLowerCase().includes(query) ||
-        inv.orderNumber.toLowerCase().includes(query)
-    );
-  }, [invoices, searchQuery]);
+  // Filter invoices based on search and date range
+  const filteredInvoices = useMemo(() => {
+    let filtered = invoices;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (inv) =>
+          inv.invoiceNumber.toLowerCase().includes(query) ||
+          inv.customerName.toLowerCase().includes(query) ||
+          inv.orderNumber.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply date range filter
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((inv) => {
+        const invoiceDate = parseInvoiceDate(inv.invoiceDate);
+        if (!invoiceDate) return false;
+        invoiceDate.setHours(0, 0, 0, 0);
+        return invoiceDate >= fromDate;
+      });
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter((inv) => {
+        const invoiceDate = parseInvoiceDate(inv.invoiceDate);
+        if (!invoiceDate) return false;
+        invoiceDate.setHours(23, 59, 59, 999);
+        return invoiceDate <= toDate;
+      });
+    }
+
+    return filtered;
+  }, [invoices, searchQuery, dateFrom, dateTo]);
 
   // Pagination
   const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage);
@@ -305,8 +347,8 @@ function InvoicesContent() {
           </div>
         )}
 
-        {/* Search */}
-        <div className="flex gap-4">
+        {/* Search and Date Range Filter */}
+        <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -318,6 +360,51 @@ function InvoicesContent() {
               }}
               className="pl-10"
             />
+          </div>
+          
+          {/* Date Range Filter */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Date Range:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                placeholder="From Date"
+                value={dateFrom}
+                onChange={(e) => {
+                  setDateFrom(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-[160px]"
+              />
+              <span className="text-muted-foreground">to</span>
+              <Input
+                type="date"
+                placeholder="To Date"
+                value={dateTo}
+                onChange={(e) => {
+                  setDateTo(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-[160px]"
+              />
+              {(dateFrom || dateTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDateFrom('');
+                    setDateTo('');
+                    setCurrentPage(1);
+                  }}
+                  className="h-8"
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 

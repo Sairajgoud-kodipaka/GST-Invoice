@@ -459,14 +459,14 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
           
           if (allSkipped && alreadyExistsCount === skippedInvoices.length) {
             // All invoices already exist
-            title = 'All orders already exist';
+            title = '✅ All invoices already exist';
             const identicalCount = skippedInvoices.filter(s => 
               s.reason.includes('This order already exists')
             ).length;
             
             if (identicalCount === skippedInvoices.length) {
               // All are identical
-              description = `All ${skippedInvoices.length} order(s) already exist and are identical. No changes detected.\n\nExamples:\n${skippedInvoices.slice(0, 3).map(s => `Order ${s.orderNo}`).join('\n')}${skippedInvoices.length > 3 ? `\n... and ${skippedInvoices.length - 3} more` : ''}`;
+              description = `All ${skippedInvoices.length} invoice(s) already exist and are identical. No changes detected.\n\nThese invoices are ready to use on the Invoices page.\n\nExamples:\n${skippedInvoices.slice(0, 3).map(s => `Order ${s.orderNo}`).join('\n')}${skippedInvoices.length > 3 ? `\n... and ${skippedInvoices.length - 3} more` : ''}`;
             } else {
               // Mix of identical and with invoices
             const skippedDetails = skippedInvoices.slice(0, 3).map(s => {
@@ -479,7 +479,7 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
                 }
             }).join('\n');
             const moreCount = skippedInvoices.length > 3 ? `\n... and ${skippedInvoices.length - 3} more orders` : '';
-              description = `All ${skippedInvoices.length} order(s) already exist.\n\nExamples:\n${skippedDetails}${moreCount}`;
+              description = `All ${skippedInvoices.length} invoice(s) already exist and are ready to use.\n\nYou can view, download, or print them on the Invoices page.\n\nExamples:\n${skippedDetails}${moreCount}`;
             }
           } else if (allSkipped) {
             // All skipped but mixed reasons
@@ -498,7 +498,7 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
           toast({
             title,
             description,
-            variant: 'destructive',
+            variant: allSkipped && alreadyExistsCount === skippedInvoices.length ? 'default' : 'destructive',
             duration: 15000, // Show for 15 seconds
           });
         }
@@ -509,11 +509,20 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
         const hasSuccessfulInvoices = finalInvoices.length > 0;
         const allWereSkipped = skippedInvoices.length === rawInvoices.length && rawInvoices.length > 0;
         
+        // Check if all were skipped due to existing invoices
+        const allSkippedDueToExisting = allWereSkipped && skippedInvoices.every(s => 
+          s.reason.includes('already has invoice') || 
+          s.reason.includes('already exists') ||
+          s.reason.includes('This order already exists')
+        );
+        
         processedFiles.push({
           name: file.name,
           success: hasSuccessfulInvoices,
           error: allWereSkipped 
-            ? `All ${rawInvoices.length} invoice(s) were skipped. See details in toast notification above.`
+            ? allSkippedDueToExisting
+              ? `All ${rawInvoices.length} invoice(s) already exist in database`
+              : `All ${rawInvoices.length} invoice(s) were skipped. See details in toast notification above.`
             : undefined,
           invoiceCount: finalInvoices.length,
         });
@@ -540,21 +549,38 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
     const failedFiles = processedFiles.filter(f => !f.success);
     const totalInvoices = allInvoices.length;
 
+    // Check if all files were skipped due to existing invoices
+    const allSkippedDueToExisting = processedFiles.every(f => 
+      f.error && f.error.includes('already exist in database')
+    ) && totalInvoices === 0;
+
     if (failedFiles.length > 0) {
-      // Partial success - show warning with details
-      const failedFileNames = failedFiles.map(f => f.name).join(', ');
-      const errorMessage = failedFiles.length === totalFiles
-        ? `All files failed to process. ${failedFiles[0]?.error || 'Unknown error'}`
-        : `${failedFiles.length} file(s) failed: ${failedFileNames}. ${successfulFiles} file(s) processed successfully with ${totalInvoices} invoice(s).`;
-      
-      if (totalInvoices > 0) {
-        // Partial success - still call onInvoicesReady but also show error
-        onInvoicesReady(allInvoices);
-        onError(errorMessage);
-      } else {
-        // Complete failure
-        onError(errorMessage);
+      // Check if failures are due to existing invoices
+      if (allSkippedDueToExisting) {
+        // All invoices already exist - show clear, positive message
+        const totalSkipped = processedFiles.reduce((sum, f) => {
+          const match = f.error?.match(/(\d+) invoice\(s\) already exist/);
+          return sum + (match ? parseInt(match[1]) : 1);
+        }, 0);
+        
+        onError(`✅ All ${totalSkipped || processedFiles.length} invoice(s) already exist!\n\nThese invoices are already in your database and ready to use.\n\nYou can:\n• View them on the Invoices page\n• Download or print them directly\n• No need to re-import - they're already available\n\nIf you want to update them, delete the existing invoices first and then re-import.`);
         setStep('upload');
+      } else {
+        // Partial success or actual failures - show warning with details
+        const failedFileNames = failedFiles.map(f => f.name).join(', ');
+        const errorMessage = failedFiles.length === totalFiles
+          ? `All files failed to process. ${failedFiles[0]?.error || 'Unknown error'}`
+          : `${failedFiles.length} file(s) failed: ${failedFileNames}. ${successfulFiles} file(s) processed successfully with ${totalInvoices} invoice(s).`;
+        
+        if (totalInvoices > 0) {
+          // Partial success - still call onInvoicesReady but also show error
+          onInvoicesReady(allInvoices);
+          onError(errorMessage);
+        } else {
+          // Complete failure
+          onError(errorMessage);
+          setStep('upload');
+        }
       }
     } else {
       // Complete success
@@ -562,14 +588,17 @@ export function CSVProcessor({ onInvoicesReady, onError }: CSVProcessorProps): R
         onInvoicesReady(allInvoices);
       } else {
         // Check if all invoices were skipped
-        const allSkipped = processedFiles.every(f => f.error && f.error.includes('skipped'));
+        const allSkipped = processedFiles.every(f => f.error && (
+          f.error.includes('skipped') || 
+          f.error.includes('already exist in database')
+        ));
         if (allSkipped) {
           const totalSkipped = processedFiles.reduce((sum, f) => {
-            const match = f.error?.match(/(\d+) invoice\(s\) were skipped/);
-            return sum + (match ? parseInt(match[1]) : 0);
+            const match = f.error?.match(/(\d+) invoice\(s\)/);
+            return sum + (match ? parseInt(match[1]) : 1);
           }, 0);
           
-          onError(`All ${totalSkipped || processedFiles.length} invoice(s) were skipped because the orders already have invoices.\n\nThese invoices already exist in the database and cannot be regenerated.\n\nTo import these orders again:\n1. Go to the Invoices page\n2. Delete the existing invoices for these orders\n3. Then re-import the CSV file\n\nCheck the toast notification above for specific order numbers.`);
+          onError(`✅ All ${totalSkipped || processedFiles.length} invoice(s) already exist!\n\nThese invoices are already in your database and ready to use.\n\nYou can:\n• View them on the Invoices page\n• Download or print them directly\n• No need to re-import - they're already available\n\nIf you want to update them, delete the existing invoices first and then re-import.`);
         } else {
           onError('No invoices were generated from the uploaded files. Please check the CSV format and try again.');
         }
